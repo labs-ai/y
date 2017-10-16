@@ -38,7 +38,7 @@ Inference speed - Display disabled|
 
 ## Compilation in Ubuntu Linux
 
-Ensure that OpenCV is built with GTK+ 2.x and C++11 support.
+Ensure OpenCV is built with GTK+ 2.x and C++11 support.
 
 	mkdir build
 	cd build

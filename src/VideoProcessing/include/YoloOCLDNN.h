@@ -216,8 +216,18 @@ private:
 	cv::Mat						m_CairoTarget;
 	cv::Mat						m_OverlayFinalMat;
 	cv::Mat						m_CurrentImage;
+	cv::Mat						m_WorkingImage;
+	cv::Mat						m_DisplayImageMat;
 	bool						m_EnableDisplay;
 	bool                        m_SaveOutput;
+	int                         m_SyncCount;
+	int                         m_SyncRefCount;
+	char                        m_CurrImageName[FILENAME_MAX];
+	char                        m_WorkingImageName[FILENAME_MAX];
+
+
+	vector<string>				m_ImageBatch;
+	vector<string>				m_ImageNames;
 
 
 	static inline float LogisticActivate(float x) { return (float)(1. / (1. + exp(-x))); }
@@ -240,6 +250,9 @@ private:
 	void PutCairoTimeOverlay(std::string const& timeText, cv::Point2d timeCenterPoint, std::string const& fontFace, double fontSize,
 		cv::Scalar textColor, bool fontItalic, bool fontBold);
 
+	
+	
+
 public:
 
 	YOLONeuralNet(char* classLabelsFile, char *networkConfigFile, char *weightsFile, bool display, bool saveOutput);
@@ -247,6 +260,14 @@ public:
 	bool Initialize();
 	void Finalize();
 	void ComputeYOLONNOutput(char* inputFile);
+	int GetRemainingImagesCount();
+	void GetNextImage(char *outImagePath, char *outImageName);
+	void SetCurrentImageName(std::string srcImageName, std::string workingImageName);
+	bool IsProcInSync();
+	void IncrementSyncCount();
+	void PreProcessImage(char *inputImage);
+	void ProcessImageBatch(char *srcFolder);
+	void CloneCurrentImage();
 
 };
 

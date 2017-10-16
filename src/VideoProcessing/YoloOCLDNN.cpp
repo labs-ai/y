@@ -23,6 +23,45 @@ limitations under the License.*/
 
 float BBOX_COLORS[6][3] = { { 1,0,1 },{ 0,0,1 },{ 0,1,1 },{ 0,1,0 },{ 1,1,0 },{ 1,0,0 } };
 
+
+#ifdef WIN32
+
+#include <windows.h>
+#include <tchar.h>
+#include <stdio.h>
+
+void EnumerateFilesInDirectory(string srcFolder,  vector<string> &fileNames, vector<string> &imageNames) {
+
+	WIN32_FIND_DATA fd;
+	string search_path = "";
+
+	for (int i = 0; i < 2; i++) {
+	
+		if(i == 0)
+			search_path = srcFolder + "\\*.jpg";
+		else if(i == 1)
+			search_path = srcFolder + "\\*.png";
+
+
+		HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
+		if (hFind != INVALID_HANDLE_VALUE) {
+			do {
+				if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+					imageNames.push_back(fd.cFileName);
+					fileNames.push_back(srcFolder + "\\" + fd.cFileName);
+				}
+			} while (::FindNextFile(hFind, &fd));
+			::FindClose(hFind);
+		}
+	}
+}
+
+#elif __linux__
+
+
+
+#endif
+
 float rand_uniform(float minVal, float maxVal)
 {
 	if (maxVal < minVal) {
@@ -1064,6 +1103,248 @@ void YOLONeuralNet::PutCairoTimeOverlay(
 
 	cairo_show_text(m_Cairo, timeText.c_str());
 	cv::cvtColor(m_CairoTarget, m_OverlayMat, cv::COLOR_BGRA2BGR);
+}
+
+
+void YOLONeuralNet::PreProcessImage(char *inputImage) {
+
+	LoadInputImage(inputImage);
+	Resizeimage(m_YOLODeepNN->m_W, m_YOLODeepNN->m_H);
+}
+
+
+void YOLONeuralNet::SetCurrentImageName(std::string srcImageName, std::string workingImageName) {
+
+	strcpy(m_CurrImageName, srcImageName.c_str());
+	strcpy(m_WorkingImageName, workingImageName.c_str());
+
+}
+
+int YOLONeuralNet::GetRemainingImagesCount() {
+
+	return m_ImageBatch.size();
+}
+
+void YOLONeuralNet::GetNextImage(char *outImagePath, char *outImageName) {
+
+	if (m_ImageBatch.size() > 0) {
+		
+		strcpy(outImagePath, m_ImageBatch[0].c_str());
+		m_ImageBatch.erase(m_ImageBatch.begin());
+		strcpy(outImageName, m_ImageNames[0].c_str());
+		m_ImageNames.erase(m_ImageNames.begin());
+	}
+}
+
+bool YOLONeuralNet::IsProcInSync() {
+
+	return (m_SyncRefCount == m_SyncCount);
+}
+
+void YOLONeuralNet::IncrementSyncCount() {
+
+	m_SyncCount++;
+}
+
+void YOLONeuralNet::CloneCurrentImage() {
+
+	m_WorkingImage = m_CurrentImage.clone();
+
+}
+
+#ifdef WIN32
+
+void ProcessImages(YOLONeuralNet *yoloNNObj) {
+
+	char imagePath[FILENAME_MAX];
+	char imageName[FILENAME_MAX];
+	DWORD tickCount = ::GetTickCount();
+	while (yoloNNObj->GetRemainingImagesCount() > 0) {
+		
+		yoloNNObj->CloneCurrentImage();
+
+		while (!yoloNNObj->IsProcInSync())
+			::Sleep(2);
+
+		tickCount = ::GetTickCount();
+		yoloNNObj->GetNextImage(imagePath, imageName);
+		yoloNNObj->PreProcessImage(imagePath);
+		tickCount = ::GetTickCount() - tickCount;
+		yoloNNObj->SetCurrentImageName(imagePath, imageName);
+		yoloNNObj->IncrementSyncCount();
+	}
+}
+
+
+DWORD WINAPI ProcessBatchInput(LPVOID lpParameter) {
+
+	YOLONeuralNet *yoloNNObj = (YOLONeuralNet*)lpParameter;
+	ProcessImages(yoloNNObj);
+	return 0;
+}
+
+#elif __linux__
+
+#endif
+
+void YOLONeuralNet::ProcessImageBatch(char *srcFolder) {
+
+	
+
+#ifdef WIN32
+
+	EnumerateFilesInDirectory(string(srcFolder), m_ImageBatch, m_ImageNames);
+	HANDLE procThread = CreateThread(NULL, 0, ProcessBatchInput, (LPVOID)this, 0, NULL);
+
+#elif __linux__
+
+#endif
+
+	cv::Rect overlayRect;
+	char fileName[256];
+	char overlayText[256];
+	char overlayDeviceProp[256];
+	char outFolder[256];
+	char outImage[256];
+	float threshold = 0.15f;
+	float nms = 0.45f;
+	double timing = 0;
+	bool init = false;
+
+#ifdef WIN32
+
+	sprintf(outFolder, "%s\\output", ExePath().c_str());
+	CreateDirectory(outFolder, NULL);
+#elif __linux__
+
+	strcpy(outFolder, "output");
+	const int dirErr = mkdir(outFolder, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+	if (dirErr == -1)
+		printf("Error creating directory %s! \n", outFolder);
+#endif
+
+	sprintf(overlayDeviceProp, "Device : %s", m_OCLDeviceName);
+	StructYOLODeepNNLayer *finalLayer = &m_YOLODeepNN->m_Layers[m_YOLODeepNN->m_TotalLayers - 1];
+
+	StructDetectionBBox *detBBoxes = (StructDetectionBBox*)calloc(finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, sizeof(StructDetectionBBox));
+	float **detProbScores = (float**)calloc(finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, sizeof(float *));
+
+	for (int j = 0; j < finalLayer->m_W * finalLayer->m_H * finalLayer->m_N; ++j)
+		detProbScores[j] = (float*)calloc(finalLayer->m_Classes, sizeof(float));
+
+	int inputSize = m_YOLODeepNN->m_Layers[0].m_Inputs * m_YOLODeepNN->m_BatchSize;
+	StructYOLODeepNNState yoloNNCurrentState;
+	memset(&yoloNNCurrentState, 0, sizeof(StructYOLODeepNNState));
+
+	while (GetRemainingImagesCount() > 0) {
+
+#ifdef WIN32
+		while (m_SyncCount == m_SyncRefCount)
+			::Sleep(1);
+#endif
+
+		if (m_SyncCount != m_SyncRefCount) {
+
+			//new image is available
+			m_SyncRefCount = m_SyncCount;
+			
+			if (yoloNNCurrentState.m_InputRefGpu == NULL) {
+
+				m_OverlayMat = cv::Mat(cv::Size(m_InImage->m_W, 50), CV_8UC3);
+				m_OverlayMat.setTo((cv::Scalar)0);
+				m_OverlayFinalMat = cv::Mat(cv::Size(m_OverlayMat.cols, m_OverlayMat.rows), CV_8UC3);
+				overlayRect.x = 0;
+				overlayRect.y = 0;
+				overlayRect.width = m_OverlayMat.cols;
+				overlayRect.height = m_OverlayMat.rows;
+				m_DisplayImageMat = cv::Mat(cv::Size(m_InImage->m_W, m_InImage->m_H), CV_8UC3);
+				yoloNNCurrentState.m_InputRefGpu = m_OCLManager->InitializeFloatArray(m_ResizedImage->m_DataArray, inputSize);
+			}
+			else
+				m_OCLManager->WriteFloatArray(yoloNNCurrentState.m_InputRefGpu, m_ResizedImage->m_DataArray, inputSize);
+
+			const auto start_time = std::chrono::steady_clock::now();
+			yoloNNCurrentState.m_LayerIndex = 0;
+			yoloNNCurrentState.m_DeepNN = m_YOLODeepNN;
+			yoloNNCurrentState.m_InputGpu = yoloNNCurrentState.m_InputRefGpu;
+			yoloNNCurrentState.m_Workspace = m_YOLODeepNN->m_Workspace;
+			yoloNNCurrentState.m_ConvSwapBufIdx = (yoloNNCurrentState.m_ConvSwapBufIdx == 0) ? 1 : 0;
+
+			for (int i = 0; i < m_YOLODeepNN->m_TotalLayers; ++i) {
+
+				yoloNNCurrentState.m_LayerIndex = i;
+
+				PropagateLayerInputsForward(&m_YOLODeepNN->m_Layers[i], &yoloNNCurrentState);
+				if (m_YOLODeepNN->m_Layers[i].m_LayerType == EnumYOLODeepNNLayerType::YOLO_DNN_LAYER_CONVOLUTIONAL)
+					yoloNNCurrentState.m_InputGpu = m_YOLODeepNN->m_Layers[i].m_OutputSwapGPUBuffers[yoloNNCurrentState.m_ConvSwapBufIdx];
+				else
+					yoloNNCurrentState.m_InputGpu = m_YOLODeepNN->m_Layers[i].m_Output_Gpu;
+				yoloNNCurrentState.m_InputSize = m_YOLODeepNN->m_Layers[i].m_Batch * m_YOLODeepNN->m_Layers[i].m_OutH *
+					m_YOLODeepNN->m_Layers[i].m_OutW * m_YOLODeepNN->m_Layers[i].m_N;
+			}
+
+			const auto elapsed_time = std::chrono::steady_clock::now() - start_time;
+			timing = std::chrono::duration<double, std::milli>(elapsed_time).count();
+			printf("Predicted in %2.2f ms. Expected Proc speed is  : %2.2f FPS \n", timing, 1000 / timing);
+
+			GetDetectionBBoxes(finalLayer, 1, 1, threshold, detProbScores, detBBoxes, 0, 0);
+			ApplyNMS(detBBoxes, detProbScores, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, finalLayer->m_Classes, nms);
+			DrawDetections(m_InImage, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, threshold,
+				detBBoxes, detProbScores, m_ClassLabels, finalLayer->m_Classes, m_WorkingImage);
+			m_OverlayMat.setTo((cv::Scalar)0);
+			sprintf(overlayText, "Inference Duration : %2.2f ms Speed : %2.2f fps", timing, 1000 / timing);
+			PutCairoTimeOverlay(overlayText, cv::Point2d(180, 20), "arial", 15, cv::Scalar(0, 255, 255), false, true);
+			PutCairoTimeOverlay(overlayDeviceProp, cv::Point2d(180, 40), "arial", 15, cv::Scalar(0, 255, 255), false, true);
+			m_DisplayImageMat = m_WorkingImage.clone();
+			cv::addWeighted(m_OverlayMat, 1, m_DisplayImageMat(overlayRect), 0.5, 0.0, m_OverlayFinalMat);
+			m_OverlayFinalMat += 0.4 * m_OverlayFinalMat;
+			m_OverlayFinalMat.copyTo(m_DisplayImageMat(overlayRect));
+
+			if (m_SaveOutput) {
+
+				sprintf(outImage, "%s\\%s", outFolder, m_WorkingImageName);
+				cv::imwrite(outImage, m_DisplayImageMat);
+				//printf("Image saved to %s\n", outImage);
+			}
+
+			if (m_EnableDisplay) {
+
+				cv::imshow("Detections", m_DisplayImageMat);
+				cvWaitKey(0);
+			}
+
+			cvWaitKey(1);
+			
+		}
+	}
+
+	m_OCLManager->FinalizeFloatArray(yoloNNCurrentState.m_InputRefGpu);
+	yoloNNCurrentState.m_InputRefGpu = NULL;
+
+	free(m_InImage->m_DataArray);
+	delete m_InImage;
+	m_InImage = NULL;
+	free(m_ResizedImage->m_DataArray);
+	delete m_ResizedImage;
+	m_ResizedImage = NULL;
+	free(detBBoxes);
+
+	for (int i = 0; i < finalLayer->m_W * finalLayer->m_H * finalLayer->m_N; i++)
+		free(detProbScores[i]);
+
+	//if (m_CurrentIplImage != NULL) {
+
+	//cvReleaseImage(&m_CurrentIplImage);
+	//m_CurrentIplImage = NULL;
+	//}
+
+	if (m_CurrentImage.data != NULL)
+		m_CurrentImage.release();
+
+	m_OverlayMat.release();
+	m_OverlayFinalMat.release();
+	cvWaitKey(0);
+	cvDestroyAllWindows();
 }
 
 void YOLONeuralNet::ComputeYOLONNOutput(char* inputFile) {

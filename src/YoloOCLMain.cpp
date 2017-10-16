@@ -42,8 +42,10 @@ int main(int argc, char* argv[]) {
 	string	currentDir = ExePath();
 
 	char	inputImage[FILENAME_MAX];
+	char	inputFolder[FILENAME_MAX];
 	int		enableDisplay = 0;
 	int		saveOutput = 0;
+	int     inputType = 0; 
 
 	for (int i = 1; i < argc; i++) {
 
@@ -55,6 +57,17 @@ int main(int argc, char* argv[]) {
 				return -1;
 			}
 			strcpy(inputImage, argv[i]);
+			inputType |= 1 << 0;
+		}
+		else if (strcmp(argv[i], "-folder") == 0) {
+
+			if (++i >= argc) {
+
+				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				return -1;
+			}
+			strcpy(inputFolder, argv[i]);
+			inputType |= 1 << 1;
 		}
 		else if (strcmp(argv[i], "-display") == 0) {
 
@@ -74,7 +87,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	if (!FileExists(inputImage)) {
+	if (((inputType >> 0) & 1) && !FileExists(inputImage)) {
 
 		printf("ERROR - Input file is not valid. Terminating...\n");
 		return -1;
@@ -95,7 +108,11 @@ int main(int argc, char* argv[]) {
 	m_YOLODeepNNObj = new YOLONeuralNet(labelsFile, configFile, weightsFile, 
 		(enableDisplay == 1)?true:false, (saveOutput == 1)?true:false);
 	m_YOLODeepNNObj->Initialize();
-	m_YOLODeepNNObj->ComputeYOLONNOutput(inputImage);
+	
+	if((inputType >> 0) & 1)
+		m_YOLODeepNNObj->ComputeYOLONNOutput(inputImage);
+	else if((inputType >> 1) & 1)
+		m_YOLODeepNNObj->ProcessImageBatch(inputFolder);
 
 	m_YOLODeepNNObj->Finalize();
 	delete m_YOLODeepNNObj;
