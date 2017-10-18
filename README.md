@@ -38,12 +38,12 @@ Inference speed - Display disabled|
 6. [CLBLast](https://github.com/CNugteren/CLBlast) - Excellent BLAS library for OpenCL enabled hardware.
 
 ## Compilation in Ubuntu Linux
-
-* Ensure OpenCV is built with GTK+ 2.x and C++11 support.
-* Ensure Cairo graphics is installed. Follow this [link](https://www.cairographics.org/download/)
-* Ensure FFMPEG is installed. Runtime libraries can be installed following this [link](http://ubuntuhandbook.org/index.php/2016/09/install-ffmpeg-3-1-ubuntu-16-04-ppa/). Development libraries must be installed as below
+1.Ensure OpenCV is built with GTK+ 2.x and C++11 support.
+2.Ensure Cairo graphics is installed. Follow this [link](https://www.cairographics.org/download/)
+3.Ensure FFMPEG is installed. Runtime libraries can be installed following this [link](http://ubuntuhandbook.org/index.php/2016/09/install-ffmpeg-3-1-ubuntu-16-04-ppa/). Development libraries must be installed as below.
 
 	sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
+	
 	mkdir build
 	cd build
 	cmake .. 
@@ -70,17 +70,19 @@ Two output options are currently supported
 * The overlayed detections can be saved as JPG images. Set **-save** argument to 1. In this case, JPG images will be saved to **output** directory within the build directory.
 
 Processing a single image.
- > YoloOCLInference.exe -input <image> -display <0/1> - save <0/1>
+ > YoloOCLInference.exe -input image -display <0/1> - save <0/1>
     
 Processing a batch of images. Presently, only JPG and PNG images are supported
- > YoloOCLInference.exe -folder <folder> -display <0/1> - save <0/1>
+ > YoloOCLInference.exe -folder folder -display <0/1> - save <0/1>
 
 Processing a video.
-> YoloOCLInference.exe -video <video> -display <0/1> - save <0/1>
+> YoloOCLInference.exe -video video -display <0/1> - save <0/1>
 
  examples:  
  > YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0
+ 
  > YoloOCLInference.exe -folder "C:\Dataset\frames" -display 0 -save 0
+ 
  > YoloOCLInference.exe -video "C:\Dataset\testvideo.mp4" -display 0 -save 0
  
 If you prefer to let the engine free-flow without any display or saving options, the benchmarks reported here can be reproduced. 
@@ -89,9 +91,9 @@ The relvant command in this case would be
 > YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0
  
 ## Future work
-* Display detected objects with text overlay.
-* Support storing output video to disk
-* Build a reusable API that supports RAW image input and file input (both video & image). The RAW image input is expected to be very useful in feeding hardware accelerated decoder output from either the same GPU (NVIDIA, AMD, ARM chips) or host CPU (Intel Quick Sync).
+* Display detected objects class names as text overlay.
+* Support storing output video to disk.
+* Support YUV image input.
 
 ## Acknowledgements
 Thanks to the authors of following repos.
