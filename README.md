@@ -31,15 +31,23 @@ Inference speed - Display disabled|
 ## Dependencies
 1. CMake 3.8.11 (May work with older versions)
 2. VC++ 2015 (Windows only)
-3. OpenCV 3.3.0
+3. OpenCV 3.3.0 (Windows libraries are in 3rdparty folder)
+4. FFMPEG (Windows libraries are in 3rdparty folder. FFMPEG runtime and development libraries dependencies must be met in Ubuntu Linux)
 4. Gtkmm (Windows only). Download installer from [here](http://ftp.gnome.org/pub/GNOME/binaries/win64/gtkmm/2.22/gtkmm-win64-devel-2.22.0-2.exe)
-5. NVIDIA Computing tool kit v9.0 (OpenCL library references)
+5. NVIDIA Computing tool kit v9.0/AMD APP SDK/Intel OpenCL SDK (OpenCL library references)
 6. [CLBLast](https://github.com/CNugteren/CLBlast) - Excellent BLAS library for OpenCL enabled hardware.
 
 ## Compilation in Ubuntu Linux
 
-Ensure OpenCV is built with GTK+ 2.x and C++11 support.
+* Ensure OpenCV is built with GTK+ 2.x and C++11 support.
+* Ensure Cairo graphics is installed. Follow this [link](https://www.cairographics.org/download/)
+* Ensure FFMPEG is installed. Runtime libraries can be installed following this [link](http://ubuntuhandbook.org/index.php/2016/09/install-ffmpeg-3-1-ubuntu-16-04-ppa/). Development libraries must be installed as below
 
+	sudo apt-get install libavcodec-dev
+	sudo apt-get install libavformat-dev
+	sudo apt-get install libswscale-dev
+	sudo apt-get install libavutil-dev
+	
 	mkdir build
 	cd build
 	cmake .. 
@@ -47,38 +55,45 @@ Ensure OpenCV is built with GTK+ 2.x and C++11 support.
 
 ## Compilation in Windows
 
+The 3rdparty folder provides both the runtime and development libraires required for compilation. Cairo runtime dependencies will be met by Gtkmm installation. 
+
 	mkdir build
 	cd build
 	cmake .. -G "Visual Studio 14 2015 Win64"
 	cmake --build . --target ALL_BUILD --config Release
 
 ## Usage
-  Open command prompt & browse to the build directory
-  Type 
-  
+
+YoloOCLInference supports processing the following input types
+* Single image
+* Folder containing images
+* Video file
+
+Two output options are currently supported
+* Displaying the output with detections by setting **-display** argument to 1. In this case, an OpenCV output window with detections will pause for user input before proceeding onto running inference on next frame.
+* The overlayed detections can be saved as JPG images. Set **-save** argument to 1. In this case, JPG images will be saved to **output** directory within the build directory.
+
+Processing a single image.
  > YoloOCLInference.exe -input <image> -display <0/1> - save <0/1>
     
- eg:  
- > YoloOCLInference.exe -input pedestrians.jpg -display 1 -save 0
- 
-The above command will make the executable load 'pedestrians.jpg' image available in build directory and runs inference on it. Here, the output display is enabled with option **-display 1**, so an OpenCV window will display the detected output as above. In case the **-save** option is set to 1, the frames with detections will be written to disk in a folder named **output** within build directory. If **-save** option is set to 0, the detection output frames with overlay will not be saved to disk. 
+Processing a batch of images. Presently, only JPG and PNG images are supported
+ > YoloOCLInference.exe -folder <folder> -display <0/1> - save <0/1>
 
-Supposing display option is enabled, the OpenCV output window will pause for user input before proceeding onto running inference in next iteration.
+Processing a video.
+> YoloOCLInference.exe -video <video> -display <0/1> - save <0/1>
+
+ examples:  
+ > YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0
+ > YoloOCLInference.exe -folder "C:\Dataset\frames" -display 0 -save 0
+ > YoloOCLInference.exe -video "C:\Dataset\testvideo.mp4" -display 0 -save 0
  
 If you prefer to let the engine free-flow without any display or saving options, the benchmarks reported here can be reproduced. 
 The relvant command in this case would be 
 
 > YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0
  
-## Limitations
-
-Following are some of the limitations in YoloOCLInference application
-* Only single image input is supported. Neither batch input nor video file input is possible.
-* The application runs inference on the same image in a sequence for 1000 iterations. There are no control settings available.
-* Object labels/classes are not displayed near the detections overlayed
-
 ## Future work
-* Support Video file and folder/batch input of images
+* Display detected objects with text overlay.
 * Support storing output video to disk
 * Build a reusable API that supports RAW image input and file input (both video & image). The RAW image input is expected to be very useful in feeding hardware accelerated decoder output from either the same GPU (NVIDIA, AMD, ARM chips) or host CPU (Intel Quick Sync).
 

@@ -35,11 +35,25 @@ limitations under the License.*/
 #include "opencv2/highgui/highgui_c.h"
 #include "opencv2/opencv.hpp"
 
+#ifdef __linux__
+#include <pthread.h>
+#endif
+
+extern "C" {
+
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libavformat/avio.h"
+#include "libavdevice/avdevice.h"
+#include "libswscale/swscale.h"
+
+}
 
 
 #define DOABS					1
 #define ENABLE_DISPLAY			(PROFILE_KERNELS == 1 || 0)
 
+void EnumerateFilesInDirectory(string srcFolder,  vector<string> &fileNames, vector<string> &imageNames);
 
 typedef enum {
 
@@ -222,12 +236,29 @@ private:
 	bool                        m_SaveOutput;
 	int                         m_SyncCount;
 	int                         m_SyncRefCount;
+
+	char						m_SrcVideoPath[FILENAME_MAX];
 	char                        m_CurrImageName[FILENAME_MAX];
 	char                        m_WorkingImageName[FILENAME_MAX];
 
 
 	vector<string>				m_ImageBatch;
 	vector<string>				m_ImageNames;
+
+	AVFormatContext				*m_AVFormatContext;
+	int							m_VideoStreamIdx;
+	AVCodecContext				*m_AVCodecCtx;
+	AVCodec						*m_AVCodec;
+	AVFrame						*m_AVFrame;
+	AVFrame						*m_AVFrameRGB;
+	int							m_NumRGBbytes;
+	uint8_t						*m_AVRGBBuffer;
+	struct SwsContext			*m_ImgConvertCtx;
+
+#ifdef __linux__
+	pthread_t 			m_ProcThread;
+#endif
+
 
 
 	static inline float LogisticActivate(float x) { return (float)(1. / (1. + exp(-x))); }
@@ -259,14 +290,23 @@ public:
 	~YOLONeuralNet();
 	bool Initialize();
 	void Finalize();
-	void ComputeYOLONNOutput(char* inputFile);
+	void ProcessSingleImage(char* inputFile);
+	void ProcessImageBatch(char *srcFolder);
+	void ProcessVideo(char *srcVideoPath);
+	bool PreProcessVideoFrame(cv::Mat &srcVideoFrame);
+	bool OpenVideoFileName(cv::Mat &dstMat);
+	bool GetNextFrameFromVideo(cv::Mat &dstMat);
+	void CloseVideoFileName();
+	void ResizeVideoFrame();
 	int GetRemainingImagesCount();
 	void GetNextImage(char *outImagePath, char *outImageName);
+	void CopyVideoFileName(char *dstFilePath);
 	void SetCurrentImageName(std::string srcImageName, std::string workingImageName);
 	bool IsProcInSync();
 	void IncrementSyncCount();
+	void SignalEOS();
 	void PreProcessImage(char *inputImage);
-	void ProcessImageBatch(char *srcFolder);
+	
 	void CloneCurrentImage();
 
 };

@@ -43,6 +43,7 @@ int main(int argc, char* argv[]) {
 
 	char	inputImage[FILENAME_MAX];
 	char	inputFolder[FILENAME_MAX];
+	char	inputVideo[FILENAME_MAX];
 	int		enableDisplay = 0;
 	int		saveOutput = 0;
 	int     inputType = 0; 
@@ -68,6 +69,16 @@ int main(int argc, char* argv[]) {
 			}
 			strcpy(inputFolder, argv[i]);
 			inputType |= 1 << 1;
+		}
+		else if (strcmp(argv[i], "-video") == 0) {
+
+			if (++i >= argc) {
+
+				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				return -1;
+			}
+			strcpy(inputVideo, argv[i]);
+			inputType |= 1 << 2;
 		}
 		else if (strcmp(argv[i], "-display") == 0) {
 
@@ -110,9 +121,11 @@ int main(int argc, char* argv[]) {
 	m_YOLODeepNNObj->Initialize();
 	
 	if((inputType >> 0) & 1)
-		m_YOLODeepNNObj->ComputeYOLONNOutput(inputImage);
+		m_YOLODeepNNObj->ProcessSingleImage(inputImage);
 	else if((inputType >> 1) & 1)
 		m_YOLODeepNNObj->ProcessImageBatch(inputFolder);
+	else if((inputType >> 2) & 1)
+		m_YOLODeepNNObj->ProcessVideo(inputVideo);
 
 	m_YOLODeepNNObj->Finalize();
 	delete m_YOLODeepNNObj;
