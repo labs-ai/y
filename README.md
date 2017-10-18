@@ -43,11 +43,7 @@ Inference speed - Display disabled|
 * Ensure Cairo graphics is installed. Follow this [link](https://www.cairographics.org/download/)
 * Ensure FFMPEG is installed. Runtime libraries can be installed following this [link](http://ubuntuhandbook.org/index.php/2016/09/install-ffmpeg-3-1-ubuntu-16-04-ppa/). Development libraries must be installed as below
 
-	sudo apt-get install libavcodec-dev
-	sudo apt-get install libavformat-dev
-	sudo apt-get install libswscale-dev
-	sudo apt-get install libavutil-dev
-	
+	sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
 	mkdir build
 	cd build
 	cmake .. 
