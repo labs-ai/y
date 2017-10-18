@@ -26,7 +26,7 @@ Inference speed - Display disabled|
    * Linear activation has been altogether disabled. Output stays untouched once bias is added to GEMM output.
    * Loop unrolling where ever applicable. 
 4. Uses [cairo graphics](https://wiki.gnome.org/Projects/gtkmm/MSWindows) to render overlay of text
-5. Far less memory footprint compared to original CUDA version. 
+5. Small memory footprint(~200MB). 
 
 ## Dependencies
 1. CMake 3.8.11 (May work with older versions)
