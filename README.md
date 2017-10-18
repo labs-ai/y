@@ -38,11 +38,11 @@ Inference speed - Display disabled|
 6. [CLBLast](https://github.com/CNugteren/CLBlast) - Excellent BLAS library for OpenCL enabled hardware.
 
 ## Compilation in Ubuntu Linux
-1.Ensure OpenCV is built with GTK+ 2.x and C++11 support.
-2.Ensure Cairo graphics is installed. Follow this [link](https://www.cairographics.org/download/)
-3.Ensure FFMPEG is installed. Runtime libraries can be installed following this [link](http://ubuntuhandbook.org/index.php/2016/09/install-ffmpeg-3-1-ubuntu-16-04-ppa/). Development libraries must be installed as below.
+1. Ensure OpenCV is built with GTK+ 2.x and C++11 support. 
+2. Ensure Cairo graphics is installed. Follow this [link](https://www.cairographics.org/download/) 
+3. Ensure FFMPEG is installed. Runtime libraries can be installed following this [link](http://ubuntuhandbook.org/index.php/2016/09/install-ffmpeg-3-1-ubuntu-16-04-ppa/).Development libraries must be installed as below.
 
-	sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
+sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libavutil-dev
 	
 	mkdir build
 	cd build
