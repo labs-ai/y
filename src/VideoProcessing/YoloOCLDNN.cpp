@@ -607,6 +607,19 @@ bool YOLONeuralNet::ParseNNWeights() {
 			
 				m_OCLManager->WriteFloatArray(yoloDeepNNLayer.m_Weights_Gpu, yoloDeepNNLayer.m_Weights, numWeights);
 				m_OCLManager->WriteFloatArray(yoloDeepNNLayer.m_Biases_Gpu, yoloDeepNNLayer.m_Biases, yoloDeepNNLayer.m_N);
+
+				//Free CPU memory. We wont be needing the arrays anymore
+				free(yoloDeepNNLayer.m_Biases);
+				yoloDeepNNLayer.m_Biases = NULL;
+
+				free(yoloDeepNNLayer.m_RollingMean);
+				yoloDeepNNLayer.m_RollingMean = NULL;
+
+				free(yoloDeepNNLayer.m_RollingVariance);
+				yoloDeepNNLayer.m_RollingVariance = NULL;
+
+				free(yoloDeepNNLayer.m_Weights);
+				yoloDeepNNLayer.m_Weights = NULL;
 			}
 		}
 	}
@@ -671,18 +684,6 @@ void YOLONeuralNet::Finalize() {
 		switch(m_YOLODeepNN->m_Layers[i].m_LayerType){
 
 		case EnumYOLODeepNNLayerType::YOLO_DNN_LAYER_CONVOLUTIONAL:
-
-			free(m_YOLODeepNN->m_Layers[i].m_Biases);
-			m_YOLODeepNN->m_Layers[i].m_Biases = NULL;
-
-			free(m_YOLODeepNN->m_Layers[i].m_RollingMean);
-			m_YOLODeepNN->m_Layers[i].m_RollingMean = NULL;
-
-			free(m_YOLODeepNN->m_Layers[i].m_RollingVariance);
-			m_YOLODeepNN->m_Layers[i].m_RollingVariance = NULL;
-
-			free(m_YOLODeepNN->m_Layers[i].m_Weights);
-			m_YOLODeepNN->m_Layers[i].m_Weights = NULL;
 
 			m_OCLManager->FinalizeFloatArray(m_YOLODeepNN->m_Layers[i].m_Weights_Gpu);
 			m_YOLODeepNN->m_Layers[i].m_Weights_Gpu = NULL;
