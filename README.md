@@ -71,7 +71,7 @@ Two output options are currently supported
 
 Additionally two input arguments **-det_threshold** and **-nms_overlap** are supported that affect the detector output
 * **det_threshold** - Controls sensitivity of the detector 
-* **-nms_overlap**  - Overlap percentage applied to groups of detections during the merge process with in non-maximal suppression (NMS) post processing step. 
+* **nms_overlap**  - Overlap percentage applied to groups of detections during the merge process with in non-maximal suppression (NMS) post processing step. 
 
 If these values are not supplied, then 0.2 & 0.45 are applied by default.
 
