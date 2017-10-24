@@ -47,6 +47,8 @@ int main(int argc, char* argv[]) {
 	int		enableDisplay = 0;
 	int		saveOutput = 0;
 	int     inputType = 0; 
+	float   detThreshold = 0.2f;
+	float   nmsOverlap = 0.45f;
 
 	for (int i = 1; i < argc; i++) {
 
@@ -96,6 +98,22 @@ int main(int argc, char* argv[]) {
 				return -1;
 			}
 		}
+		else if (strcmp(argv[i], "-det_threshold") == 0) {
+
+			if (++i >= argc || sscanf(argv[i], "%f", &detThreshold) != 1) {
+
+				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				return -1;
+			}
+		}
+		else if (strcmp(argv[i], "-nms_overlap") == 0) {
+
+			if (++i >= argc || sscanf(argv[i], "%f", &nmsOverlap) != 1) {
+
+				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				return -1;
+			}
+		}
 	}
 
 	if (((inputType >> 0) & 1) && !FileExists(inputImage)) {
@@ -117,7 +135,7 @@ int main(int argc, char* argv[]) {
 #endif
 	
 	m_YOLODeepNNObj = new YOLONeuralNet(labelsFile, configFile, weightsFile, 
-		(enableDisplay == 1)?true:false, (saveOutput == 1)?true:false);
+		(enableDisplay == 1)?true:false, (saveOutput == 1)?true:false, detThreshold, nmsOverlap);
 	m_YOLODeepNNObj->Initialize();
 	
 	if((inputType >> 0) & 1)

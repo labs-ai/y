@@ -53,6 +53,9 @@ extern "C" {
 #define DOABS					1
 #define ENABLE_DISPLAY			(PROFILE_KERNELS == 1 || 0)
 
+#define DST_WIDTH               416
+#define DST_HEIGHT              416
+
 void EnumerateFilesInDirectory(string srcFolder,  vector<string> &fileNames, vector<string> &imageNames);
 
 typedef enum {
@@ -255,6 +258,9 @@ private:
 	uint8_t						*m_AVRGBBuffer;
 	struct SwsContext			*m_ImgConvertCtx;
 
+	float						m_DetThreshold;
+	float						m_NMSOverlap;
+
 #ifdef __linux__
 	pthread_t 			m_ProcThread;
 #endif
@@ -286,7 +292,8 @@ private:
 
 public:
 
-	YOLONeuralNet(char* classLabelsFile, char *networkConfigFile, char *weightsFile, bool display, bool saveOutput);
+	YOLONeuralNet(char* classLabelsFile, char *networkConfigFile, char *weightsFile, 
+		bool display, bool saveOutput, float threshold, float nmsOverlap);
 	~YOLONeuralNet();
 	bool Initialize();
 	void Finalize();

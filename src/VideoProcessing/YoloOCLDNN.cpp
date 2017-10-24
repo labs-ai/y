@@ -197,7 +197,8 @@ EnumYOLODeepNNActivationType MapNNLayerActivationStr(char *activationStr) {
 }
 
 
-YOLONeuralNet::YOLONeuralNet(char* classLabelsFile, char *networkConfigFile,  char *weightsFile, bool display, bool saveOutput) {
+YOLONeuralNet::YOLONeuralNet(char* classLabelsFile, char *networkConfigFile,  char *weightsFile, 
+	bool display, bool saveOutput, float threshold, float nmsOverlap) {
 
 	strcpy(m_ClassLabelsFile, classLabelsFile);
 	strcpy(m_NetworkConfigFile, networkConfigFile);
@@ -208,6 +209,8 @@ YOLONeuralNet::YOLONeuralNet(char* classLabelsFile, char *networkConfigFile,  ch
 	m_CairoSurface = NULL;
 	m_EnableDisplay = display;
 	m_SaveOutput = saveOutput;
+	m_DetThreshold = threshold;
+	m_NMSOverlap = nmsOverlap;
 
 	av_register_all();
 //	avdevice_register_all();
@@ -1333,7 +1336,7 @@ bool YOLONeuralNet::OpenVideoFileName(cv::Mat &dstMat) {
 	avpicture_fill((AVPicture *)m_AVFrameRGB, m_AVRGBBuffer, pFormat, m_AVCodecCtx->width, m_AVCodecCtx->height);
 
 	m_ImgConvertCtx = sws_getCachedContext(NULL, m_AVCodecCtx->width, m_AVCodecCtx->height, m_AVCodecCtx->pix_fmt,
-		m_AVCodecCtx->width, m_AVCodecCtx->height, AV_PIX_FMT_BGR24, SWS_BICUBIC, NULL, NULL, NULL);
+		/*DST_WIDTH, DST_HEIGHT*/ m_AVCodecCtx->width, m_AVCodecCtx->height, AV_PIX_FMT_BGR24, SWS_BICUBIC, NULL, NULL, NULL);
 
 
 	dstMat = cv::Mat(m_AVCodecCtx->height, m_AVCodecCtx->width, CV_8UC3);
@@ -1347,28 +1350,35 @@ bool YOLONeuralNet::GetNextFrameFromVideo(cv::Mat &dstMat) {
 
 	AVPacket avPacket;
 	int frameFinished;
+	bool videoPktFound = false;
+	int resValue = -1;
 
-	int resValue = av_read_frame(m_AVFormatContext, &avPacket);
-	if (resValue >= 0) {
+	while (!videoPktFound) {
 
-		if (avPacket.stream_index == m_VideoStreamIdx) {
+		resValue = av_read_frame(m_AVFormatContext, &avPacket);
+		if (resValue >= 0) {
 
-			avcodec_decode_video2(m_AVCodecCtx, m_AVFrame, &frameFinished, &avPacket);
+			if (avPacket.stream_index == m_VideoStreamIdx) {
 
-			if (frameFinished) {
+				videoPktFound = true;
+				avcodec_decode_video2(m_AVCodecCtx, m_AVFrame, &frameFinished, &avPacket);
 
-				sws_scale(m_ImgConvertCtx, ((AVPicture*)m_AVFrame)->data, ((AVPicture*)m_AVFrame)->linesize, 0,
-					m_AVCodecCtx->height, ((AVPicture *)m_AVFrameRGB)->data, ((AVPicture *)m_AVFrameRGB)->linesize);
-				
-				memcpy(dstMat.data, m_AVFrameRGB->data[0], m_NumRGBbytes);
+				if (frameFinished) {
 
+					sws_scale(m_ImgConvertCtx, ((AVPicture*)m_AVFrame)->data, ((AVPicture*)m_AVFrame)->linesize, 0,
+						m_AVCodecCtx->height, ((AVPicture *)m_AVFrameRGB)->data, ((AVPicture *)m_AVFrameRGB)->linesize);
+
+					memcpy(dstMat.data, m_AVFrameRGB->data[0], m_NumRGBbytes);
+
+				}
 			}
 		}
-	}
-	else
-		return false;
+		else
+			return false;
 
-	av_free_packet(&avPacket);
+		av_free_packet(&avPacket);
+	}
+
 	return true;
 }
 
@@ -1537,8 +1547,8 @@ void YOLONeuralNet::ProcessVideo(char *srcVideoPath) {
 	char overlayDeviceProp[256];
 	char outFolder[256];
 	char outImage[256];
-	float threshold = 0.15f;
-	float nms = 0.45f;
+	//float threshold = 0.15f;
+	//float nms = 0.45f;
 	double timing = 0;
 	int frameCount = 0;
 	bool init = false;
@@ -1567,6 +1577,9 @@ void YOLONeuralNet::ProcessVideo(char *srcVideoPath) {
 	int inputSize = m_YOLODeepNN->m_Layers[0].m_Inputs * m_YOLODeepNN->m_BatchSize;
 	StructYOLODeepNNState yoloNNCurrentState;
 	memset(&yoloNNCurrentState, 0, sizeof(StructYOLODeepNNState));
+
+	//const auto va_start_time = std::chrono::steady_clock::now();
+	//DWORD video_start_time = ::GetTickCount();
 
 	while (1) {
 
@@ -1620,9 +1633,9 @@ void YOLONeuralNet::ProcessVideo(char *srcVideoPath) {
 			timing = std::chrono::duration<double, std::milli>(elapsed_time).count();
 			printf("Predicted in %2.2f ms. Expected Proc speed is  : %2.2f FPS \n", timing, 1000 / timing);
 
-			GetDetectionBBoxes(finalLayer, 1, 1, threshold, detProbScores, detBBoxes, 0, 0);
-			ApplyNMS(detBBoxes, detProbScores, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, finalLayer->m_Classes, nms);
-			DrawDetections(m_InImage, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, threshold,
+			GetDetectionBBoxes(finalLayer, 1, 1, m_DetThreshold, detProbScores, detBBoxes, 0, 0);
+			ApplyNMS(detBBoxes, detProbScores, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, finalLayer->m_Classes, m_NMSOverlap);
+			DrawDetections(m_InImage, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, m_DetThreshold,
 				detBBoxes, detProbScores, m_ClassLabels, finalLayer->m_Classes, m_WorkingImage);
 			m_OverlayMat.setTo((cv::Scalar)0);
 			sprintf(overlayText, "Inference Duration : %2.2f ms Speed : %2.2f fps", timing, 1000 / timing);
@@ -1656,6 +1669,13 @@ void YOLONeuralNet::ProcessVideo(char *srcVideoPath) {
 
 	pthread_join(m_ProcThread, &pthreadStatus);
 #endif
+
+	//const auto va_proc_time = std::chrono::steady_clock::now() - va_start_time;
+	//timing = std::chrono::duration<float, std::milli>(va_proc_time).count();
+	//video_start_time = ::GetTickCount() - video_start_time;
+	//printf("Processed video in %2.2f ms. Expected Proc speed is  : %2.2f FPS \n", timing, 1000 / timing);
+	//printf("Processed video in %d ms. \n", video_start_time);
+
 
 	m_OCLManager->FinalizeFloatArray(yoloNNCurrentState.m_InputRefGpu);
 	yoloNNCurrentState.m_InputRefGpu = NULL;
@@ -1709,8 +1729,8 @@ void YOLONeuralNet::ProcessImageBatch(char *srcFolder) {
 	char overlayDeviceProp[256];
 	char outFolder[256];
 	char outImage[256];
-	float threshold = 0.15f;
-	float nms = 0.45f;
+	//float threshold = 0.15f;
+	//float nms = 0.45f;
 	double timing = 0;
 	bool init = false;
 
@@ -1788,9 +1808,9 @@ void YOLONeuralNet::ProcessImageBatch(char *srcFolder) {
 			timing = std::chrono::duration<double, std::milli>(elapsed_time).count();
 			printf("Predicted in %2.2f ms. Expected Proc speed is  : %2.2f FPS \n", timing, 1000 / timing);
 
-			GetDetectionBBoxes(finalLayer, 1, 1, threshold, detProbScores, detBBoxes, 0, 0);
-			ApplyNMS(detBBoxes, detProbScores, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, finalLayer->m_Classes, nms);
-			DrawDetections(m_InImage, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, threshold,
+			GetDetectionBBoxes(finalLayer, 1, 1, m_DetThreshold, detProbScores, detBBoxes, 0, 0);
+			ApplyNMS(detBBoxes, detProbScores, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, finalLayer->m_Classes, m_NMSOverlap);
+			DrawDetections(m_InImage, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, m_DetThreshold,
 				detBBoxes, detProbScores, m_ClassLabels, finalLayer->m_Classes, m_WorkingImage);
 			m_OverlayMat.setTo((cv::Scalar)0);
 			sprintf(overlayText, "Inference Duration : %2.2f ms Speed : %2.2f fps", timing, 1000 / timing);
@@ -1854,8 +1874,8 @@ void YOLONeuralNet::ProcessSingleImage(char* inputFile) {
 	char overlayDeviceProp[256];
 	char outFolder[256];
 	char outImage[256];
-	float threshold = 0.2f;
-	float nms = 0.45f;
+	//float threshold = 0.2f;
+	//float nms = 0.45f;
 
 #ifdef WIN32
 
@@ -1930,9 +1950,9 @@ void YOLONeuralNet::ProcessSingleImage(char* inputFile) {
 		timing = std::chrono::duration<double, std::milli>(elapsed_time).count();
 		printf("Predicted in %2.2f ms. Expected Proc speed is  : %2.2f FPS \n", timing, 1000 / timing);
 		
-		GetDetectionBBoxes(finalLayer, 1, 1, threshold, detProbScores, detBBoxes, 0, 0);
-		ApplyNMS(detBBoxes, detProbScores, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, finalLayer->m_Classes, nms);
-		DrawDetections(m_InImage, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, threshold, 
+		GetDetectionBBoxes(finalLayer, 1, 1, m_DetThreshold, detProbScores, detBBoxes, 0, 0);
+		ApplyNMS(detBBoxes, detProbScores, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, finalLayer->m_Classes, m_NMSOverlap);
+		DrawDetections(m_InImage, finalLayer->m_W * finalLayer->m_H * finalLayer->m_N, m_DetThreshold,
 			detBBoxes, detProbScores, m_ClassLabels, finalLayer->m_Classes, m_CurrentImage);
 		m_OverlayMat.setTo((cv::Scalar)0);
 		sprintf(overlayText, "Inference Duration : %2.2f ms Speed : %2.2f fps", timing, 1000 / timing);

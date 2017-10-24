@@ -69,26 +69,32 @@ Two output options are currently supported
 * Displaying the output with detections by setting **-display** argument to 1. In this case, an OpenCV output window with detections will pause for user input before proceeding onto running inference on next frame.
 * The overlayed detections can be saved as JPG images. Set **-save** argument to 1. In this case, JPG images will be saved to **output** directory within the build directory.
 
+Additionally two input arguments **-det_threshold** and **-nms_overlap** are supported that affect the detector output
+* **det_threshold** - Controls sensitivity of the detector 
+* **-nms_overlap**  - Overlap percentage applied to groups of detections during the merge process with in non-maximal suppression (NMS) post processing step. 
+
+If these values are not supplied, then 0.2 & 0.45 are applied by default.
+
 Processing a single image.
- > YoloOCLInference.exe -input image -display <0/1> - save <0/1>
+ > YoloOCLInference.exe -input image -display <0/1> -save <0/1> -det_threshold 0.2 -nms_overlap 0.45
     
 Processing a batch of images. Presently, only JPG and PNG images are supported
- > YoloOCLInference.exe -folder folder -display <0/1> - save <0/1>
+ > YoloOCLInference.exe -folder folder -display <0/1> -save <0/1>
 
 Processing a video.
-> YoloOCLInference.exe -video video -display <0/1> - save <0/1>
+> YoloOCLInference.exe -video video -display <0/1> -save <0/1> -det_threshold 0.2 -nms_overlap 0.45
 
  examples:  
- > YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0
+ > YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
- > YoloOCLInference.exe -folder "C:\Dataset\frames" -display 0 -save 0
+ > YoloOCLInference.exe -folder "C:\Dataset\frames" -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
- > YoloOCLInference.exe -video "C:\Dataset\testvideo.mp4" -display 0 -save 0
+ > YoloOCLInference.exe -video "C:\Dataset\testvideo.mp4" -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
 If you prefer to let the engine free-flow without any display or saving options, the benchmarks reported here can be reproduced. 
 The relvant command in this case would be 
 
-> YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0
+> YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
 ## Future work
 * Display detected objects class names as text overlay.
