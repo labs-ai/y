@@ -33,9 +33,9 @@ Inference speed - Display disabled|
 2. VC++ 2015 (Windows only)
 3. OpenCV 3.3.0 (Windows libraries are in 3rdparty folder)
 4. FFMPEG (Windows libraries are in 3rdparty folder. FFMPEG runtime and development libraries dependencies must be met in Ubuntu Linux)
-4. Gtkmm (Windows only). Download installer from [here](http://ftp.gnome.org/pub/GNOME/binaries/win64/gtkmm/2.22/gtkmm-win64-devel-2.22.0-2.exe)
-5. NVIDIA Computing tool kit v9.0/AMD APP SDK/Intel OpenCL SDK (OpenCL library references)
-6. [CLBLast](https://github.com/CNugteren/CLBlast) - Excellent BLAS library for OpenCL enabled hardware.
+5. Gtkmm (Windows only). Download installer from [here](http://ftp.gnome.org/pub/GNOME/binaries/win64/gtkmm/2.22/gtkmm-win64-devel-2.22.0-2.exe)
+6. NVIDIA Computing tool kit v9.0/AMD APP SDK/Intel OpenCL SDK (OpenCL library references)
+7. [CLBLast](https://github.com/CNugteren/CLBlast) - Excellent BLAS library for OpenCL enabled hardware.
 
 ## Compilation in Ubuntu Linux
 1. Ensure OpenCV is built with GTK+ 2.x and C++11 support. 
@@ -57,6 +57,8 @@ The 3rdparty folder provides both the runtime and development libraires required
 	cd build
 	cmake .. -G "Visual Studio 14 2015 Win64"
 	cmake --build . --target ALL_BUILD --config Release
+	
+NOTE: Gtkmm is by default installed into **C:\gtkmm64** folder. If YoloOCLInference complains about unable to load libcairo-2.dll, it is likely that the gtkmm64 binaries are not present on system path. To ensure YoloOCLInference application can load the dependent dlls, it is recommended to add **C:\gtkmm64\bin** to system path environment variable. 	
 
 ## Usage
 
@@ -67,7 +69,7 @@ YoloOCLInference supports processing the following input types
 
 Two output options are currently supported
 * Displaying the output with detections by setting **-display** argument to 1. In this case, an OpenCV output window with detections will pause for user input before proceeding onto running inference on next frame.
-* The overlayed detections can be saved as JPG images. Set **-save** argument to 1. In this case, JPG images will be saved to **output** directory within the build directory.
+* The overlayed detections can be saved as H.264 AVI video. Set **-save** argument to 1. In this case, the inference output with deections is saved as an AVI file, **InferenceOutput.avi** within **output** directory of the build directory.
 
 Additionally two input arguments **-det_threshold** and **-nms_overlap** are supported that affect the detector output
 * **det_threshold** - Controls sensitivity of the detector 
@@ -78,7 +80,7 @@ If these values are not supplied, then 0.2 & 0.45 are applied by default.
 Processing a single image.
  > YoloOCLInference.exe -input image -display <0/1> -save <0/1> -det_threshold 0.2 -nms_overlap 0.45
     
-Processing a batch of images. Presently, only JPG and PNG images are supported
+Processing a batch of images. Presently, only JPG and PNG images are supported. All images within the folder must be of same resolution (variable resolution is not supported presently).
  > YoloOCLInference.exe -folder folder -display <0/1> -save <0/1>
 
 Processing a video.
@@ -98,7 +100,6 @@ The relvant command in this case would be
  
 ## Future work
 * Display detected objects class names as text overlay.
-* Support storing output video to disk.
 * Support YUV image input.
 
 ## Acknowledgements

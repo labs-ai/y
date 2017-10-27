@@ -24,9 +24,60 @@ limitations under the License.*/
 
 
 YOLONeuralNet	*m_YOLODeepNNObj;
+char			m_LogFilePath[FILENAME_MAX];
+fstream			m_LogFile;
+std::mutex		m_LogFileMutex;
 
+std::string GetCurrentDateTime() {
+
+	time_t     now = time(0);
+	struct tm  tstruct;
+	char       buf[80];
+	tstruct = *localtime(&now);
+	strftime(buf, sizeof(buf), "%Y-%m-%d %X ", &tstruct);
+	return buf;
+}
+
+
+void logWrite(std::string logMsg, EnumLogMsgType logType=EnumLogMsgType::LOG_MSG_TYPE_INFO) {
+
+	m_LogFileMutex.lock();
+	m_LogFile.open(m_LogFilePath, ios_base::out | ios_base::in | ios_base::app);
+	bool logFileExists = m_LogFile.is_open();
+
+	if(!logFileExists)
+		m_LogFile.open(m_LogFilePath, ios_base::out); 
+
+	std::string formattedStr = "";
+	
+	switch (logType) {
+
+		case EnumLogMsgType::LOG_MSG_TYPE_INFO:
+			formattedStr = GetCurrentDateTime() + "[INFO] " + logMsg + "\n";
+			break;
+
+		case EnumLogMsgType::LOG_MSG_TYPE_ERROR:
+			formattedStr = GetCurrentDateTime() + "[ERROR] " + logMsg + "\n";
+			break;
+
+		case EnumLogMsgType::LOG_MSG_TYPE_WARNING:
+			formattedStr = GetCurrentDateTime() + "[WARNING] " + logMsg + "\n";
+			break;
+
+		case EnumLogMsgType::LOG_MSG_TYPE_DEBUG:
+			formattedStr = GetCurrentDateTime() + "[DEBUG] " + logMsg + "\n";
+			break;
+	}
+
+	
+	m_LogFile.write(formattedStr.c_str(), formattedStr.length());
+	m_LogFile.close();
+	printf("%s", formattedStr.c_str());
+	m_LogFileMutex.unlock();
+}
 
 inline bool FileExists(const std::string& name) {
+
 	ifstream f(name.c_str());
 	return f.good();
 }
@@ -34,21 +85,29 @@ inline bool FileExists(const std::string& name) {
 
 int main(int argc, char* argv[]) {
 
-	printf("YoloOCLInference Started..\n");
-
+	string	currentDir = ExePath();
 	char	labelsFile[FILENAME_MAX];
 	char	configFile[FILENAME_MAX];
 	char	weightsFile[FILENAME_MAX];
-	string	currentDir = ExePath();
-
 	char	inputImage[FILENAME_MAX];
 	char	inputFolder[FILENAME_MAX];
 	char	inputVideo[FILENAME_MAX];
+	char	logMsg[512];
 	int		enableDisplay = 0;
 	int		saveOutput = 0;
-	int     inputType = 0; 
+	int     inputType = 0;
 	float   detThreshold = 0.2f;
 	float   nmsOverlap = 0.45f;
+
+
+#ifdef WIN32
+	sprintf(m_LogFilePath, "%s\\YoloOCLInference.log", currentDir.c_str());
+#elif __linux__
+	strcpy(m_LogFilePath, "YoloOCLInference.log");
+#endif
+
+	std::remove(m_LogFilePath);
+	logWrite("*************START*************");
 
 	for (int i = 1; i < argc; i++) {
 
@@ -56,7 +115,8 @@ int main(int argc, char* argv[]) {
 
 			if (++i >= argc) {
 
-				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
 			strcpy(inputImage, argv[i]);
@@ -66,7 +126,8 @@ int main(int argc, char* argv[]) {
 
 			if (++i >= argc) {
 
-				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
 			strcpy(inputFolder, argv[i]);
@@ -76,7 +137,8 @@ int main(int argc, char* argv[]) {
 
 			if (++i >= argc) {
 
-				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
 			strcpy(inputVideo, argv[i]);
@@ -86,7 +148,8 @@ int main(int argc, char* argv[]) {
 
 			if (++i >= argc || sscanf(argv[i], "%d", &enableDisplay) != 1) {
 
-				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
 		}
@@ -94,7 +157,8 @@ int main(int argc, char* argv[]) {
 
 			if (++i >= argc || sscanf(argv[i], "%d", &saveOutput) != 1) {
 
-				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
 		}
@@ -102,7 +166,8 @@ int main(int argc, char* argv[]) {
 
 			if (++i >= argc || sscanf(argv[i], "%f", &detThreshold) != 1) {
 
-				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
 		}
@@ -110,15 +175,18 @@ int main(int argc, char* argv[]) {
 
 			if (++i >= argc || sscanf(argv[i], "%f", &nmsOverlap) != 1) {
 
-				printf("ERROR - Invalid param for %s\n", argv[i - 1]);
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
 		}
 	}
 
-	if (((inputType >> 0) & 1) && !FileExists(inputImage)) {
+	if ((((inputType >> 0) & 1) && !FileExists(inputImage))
+		|| (((inputType >> 2) & 1) && !FileExists(inputVideo))) {
 
-		printf("ERROR - Input file is not valid. Terminating...\n");
+		sprintf(logMsg, "ERROR - File doesnot exist %s", ((inputType >> 0) & 1) ? inputImage : inputVideo);
+		logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 		return -1;
 	}
 
@@ -134,19 +202,33 @@ int main(int argc, char* argv[]) {
 	strcpy(weightsFile, "tiny-yolo.weights");
 #endif
 	
-	m_YOLODeepNNObj = new YOLONeuralNet(labelsFile, configFile, weightsFile, 
+
+	logWrite("Creating YOLONeuralNet Object", EnumLogMsgType::LOG_MSG_TYPE_INFO);
+	m_YOLODeepNNObj = new YOLONeuralNet(logWrite, labelsFile, configFile, weightsFile,
 		(enableDisplay == 1)?true:false, (saveOutput == 1)?true:false, detThreshold, nmsOverlap);
 	m_YOLODeepNNObj->Initialize();
 	
-	if((inputType >> 0) & 1)
+	if ((inputType >> 0) & 1) {
+
+		logWrite("YOLONeuralNet - Operating in single image mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
 		m_YOLODeepNNObj->ProcessSingleImage(inputImage);
-	else if((inputType >> 1) & 1)
+	}
+	else if ((inputType >> 1) & 1) {
+
+		logWrite("YOLONeuralNet - Operating in batch image mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
 		m_YOLODeepNNObj->ProcessImageBatch(inputFolder);
-	else if((inputType >> 2) & 1)
+	}
+	else if ((inputType >> 2) & 1) {
+
+		logWrite("YOLONeuralNet - Operating in video file mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
 		m_YOLODeepNNObj->ProcessVideo(inputVideo);
+	}
 
 	m_YOLODeepNNObj->Finalize();
 	delete m_YOLODeepNNObj;
 
+	logWrite("*************END*************");
+
 	return 0;
 }
+

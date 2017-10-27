@@ -28,6 +28,7 @@ limitations under the License.*/
 #include <omp.h> 
 #include <numeric>
 #include <cairo.h>
+#include <mutex>
 #include "SimpleIni.h"
 #include "OCLManager.h"
 #include "opencv2/core/core.hpp"
@@ -46,6 +47,7 @@ extern "C" {
 #include "libavformat/avio.h"
 #include "libavdevice/avdevice.h"
 #include "libswscale/swscale.h"
+#include "libavutil/imgutils.h"
 
 }
 
@@ -56,7 +58,28 @@ extern "C" {
 #define DST_WIDTH               416
 #define DST_HEIGHT              416
 
+#define MAX_FRAME_QUEUE_ITEMS   5
+
+
+
 void EnumerateFilesInDirectory(string srcFolder,  vector<string> &fileNames, vector<string> &imageNames);
+
+typedef enum {
+
+	THREAD_STATUS_INITIALIZED	= 0,
+	THREAD_STATUS_RUNNING		= 1,
+	THREAD_STATUS_TERMINATED	= 2
+}EnumThreadStatus;
+
+typedef enum {
+
+	LOG_MSG_TYPE_INFO		= 0,
+	LOG_MSG_TYPE_ERROR		= 1,
+	LOG_MSG_TYPE_WARNING	= 2,
+	LOG_MSG_TYPE_DEBUG		= 3
+}EnumLogMsgType;
+
+typedef void(*LOGGERCALLBACK)(std::string logMsg, EnumLogMsgType logType);
 
 typedef enum {
 
@@ -205,40 +228,50 @@ typedef struct {
 } StructImage;
 
 
+typedef struct {
+
+	StructImage		*m_SrcImage;
+	StructImage		*m_TempImage;
+	StructImage		*m_ResizedImage;
+	cv::Mat			m_CurrentImageMat;
+	cv::Mat			m_OverlayMat;
+	cv::Mat			m_OverlayFinalMat;
+	cv::Mat			m_DisplayImageMat;
+	cv::Rect		m_OverlayRect;
+	char			m_WorkingImageName[FILENAME_MAX];
+	bool			m_SingletonSrcObject;
+}StructRAWFrameSrcObject;
+
+typedef struct {
+
+	StructRAWFrameSrcObject *m_RAWSrcObject;
+	StructYOLODeepNNLayer	*m_FinalLayer;
+	StructDetectionBBox		*m_DetBBoxes;
+	float					**m_DetProbScores;
+	float					m_InferenceDuration;
+}StructRAWFrameSinkObject;
+
 
 class YOLONeuralNet {
 
 private:
 
 	std::vector<std::string>	m_ClassLabels;
-	char						m_ClassLabelsFile[512];
-	char						m_NetworkConfigFile[512];
-	char						m_WeightsFile[512];
+	char						m_ClassLabelsFile[FILENAME_MAX];
+	char						m_NetworkConfigFile[FILENAME_MAX];
+	char						m_WeightsFile[FILENAME_MAX];
 
 	std::vector<std::string>	m_LayerNames;
 	CSimpleIniA					*m_IniReader;
 
 	StructYOLODeepNN			*m_YOLODeepNN;
 	OCLManager					*m_OCLManager;
-
-	StructImage					*m_InImage;
-	StructImage					*m_ResizedImage;
-	StructImage					*m_TempImage;
-
 	char						m_OCLDeviceName[128];
-
-	cv::Mat						m_OverlayMat;
 	cairo_surface_t				*m_CairoSurface;
 	cairo_t						*m_Cairo;
 	cv::Mat						m_CairoTarget;
-	cv::Mat						m_OverlayFinalMat;
-	cv::Mat						m_CurrentImage;
-	cv::Mat						m_WorkingImage;
-	cv::Mat						m_DisplayImageMat;
 	bool						m_EnableDisplay;
 	bool                        m_SaveOutput;
-	int                         m_SyncCount;
-	int                         m_SyncRefCount;
 
 	char						m_SrcVideoPath[FILENAME_MAX];
 	char                        m_CurrImageName[FILENAME_MAX];
@@ -248,6 +281,7 @@ private:
 	vector<string>				m_ImageBatch;
 	vector<string>				m_ImageNames;
 
+	bool						m_VideoFileEOS;
 	AVFormatContext				*m_AVFormatContext;
 	int							m_VideoStreamIdx;
 	AVCodecContext				*m_AVCodecCtx;
@@ -257,12 +291,44 @@ private:
 	int							m_NumRGBbytes;
 	uint8_t						*m_AVRGBBuffer;
 	struct SwsContext			*m_ImgConvertCtx;
-
 	float						m_DetThreshold;
 	float						m_NMSOverlap;
+	StructYOLODeepNNState		*m_YoloNNCurrentState;
+	char						m_OutFolder[FILENAME_MAX];
+	char						m_OverlayDeviceProp[256];
+	std::queue<StructRAWFrameSrcObject*>	m_SrcFrameQueue;
+	std::mutex					m_SrcFrameQueueMutex;
+	std::queue<StructRAWFrameSinkObject*>	m_SinkFrameQueue;
+	std::mutex					m_SinkFrameQueueMutex;
+	bool						m_SinkActive;
+
+
+	LOGGERCALLBACK				logWriteFunc;
+	char						m_LogMsgStr[512];
+
+	int                         m_SinkFrameCount;
+	AVCodec						*m_AVSinkCodec;
+	AVCodecContext				*m_AVSinkCodecContext;
+	AVOutputFormat				*m_AVSinkFormat;
+	AVFormatContext				*m_AVSinkFormatContext;
+	AVStream					*m_AVSinkStream;
+	AVFrame                     *m_AVSinkFrame;
+	AVFrame                     *m_AVSinkRGBFrame;
+	struct SwsContext			*m_SinkConvertCtx;
+	int							m_SinkCopyYUVBytes;
+	uint8_t						*m_SinkYUVBuffer;
+	int							m_SinkCopyRGBBytes;
+	uint8_t						*m_SinkRGBBuffer;
+	bool						m_AVIHeaderWritten;
+
+	int							m_FpsNum;
+	int							m_FpsDen;
+
+	EnumThreadStatus			m_SinkThreadStatus;
 
 #ifdef __linux__
-	pthread_t 			m_ProcThread;
+	pthread_t 			m_ProcSrcThread;
+	pthread_t 			m_ProcSinkThread;
 #endif
 
 
@@ -273,48 +339,51 @@ private:
 	bool PrepareConvolutionalTypeLayer(int sectionIdx, int layerIdx, StructLayerFeedParams *layerFeedParams);
 	bool PrepareRegionTypeLayer(int sectionIdx, int layerIdx, StructLayerFeedParams *layerFeedParams);
 	bool PrepareMaxpoolTypeLayer(int sectionIdx, int layerIdx, StructLayerFeedParams *layerFeedParams);
-
 	bool ParseNNLayers();
 	bool ParseNNWeights();
-
 	float PropagateLayerInputsForward(StructYOLODeepNNLayer *inLayer, StructYOLODeepNNState *netState);
-	
-	void Resizeimage(int w, int h);
-	bool LoadInputImage(char const* fileName);
 	void GetDetectionBBoxes(StructYOLODeepNNLayer *nnLayer, int w, int h, float thresh, float **probs, StructDetectionBBox *bBoxes, int onlyObjectness, int *map);
 	StructDetectionBBox GetRegionBBox(float *x, float *biases, int n, int index, int i, int j, int w, int h);
 	void ApplyNMS(StructDetectionBBox *boxes, float **probs, int total, int classes, float thresh);
-	void PutCairoTimeOverlay(std::string const& timeText, cv::Point2d timeCenterPoint, std::string const& fontFace, double fontSize,
+	void PutCairoOverlay(StructRAWFrameSrcObject *srcRAWFrameObject, std::string const& timeText, cv::Point2d timeCenterPoint, std::string const& fontFace, double fontSize,
 		cv::Scalar textColor, bool fontItalic, bool fontBold);
-
+	void RunInference(StructRAWFrameSrcObject *rawFrameObject, float &inferenceDuration, 
+		float **detProbScores, StructDetectionBBox *detBBoxes);
 	
 	
 
 public:
 
-	YOLONeuralNet(char* classLabelsFile, char *networkConfigFile, char *weightsFile, 
+	YOLONeuralNet(LOGGERCALLBACK loggerCallback, char* classLabelsFile, char *networkConfigFile, char *weightsFile,
 		bool display, bool saveOutput, float threshold, float nmsOverlap);
 	~YOLONeuralNet();
+
+	inline int GetDNNWidth() { return m_YOLODeepNN->m_W; };
+	inline int GetDNNHeight() { return m_YOLODeepNN->m_H; };
+	inline bool SinkAlive() { return m_SinkActive; };
+	inline int GetFPSNum() { return m_FpsNum; };
+	inline int GetFPSDen() { return m_FpsDen; };
+
 	bool Initialize();
 	void Finalize();
 	void ProcessSingleImage(char* inputFile);
 	void ProcessImageBatch(char *srcFolder);
 	void ProcessVideo(char *srcVideoPath);
-	bool PreProcessVideoFrame(cv::Mat &srcVideoFrame);
-	bool OpenVideoFileName(cv::Mat &dstMat);
-	bool GetNextFrameFromVideo(cv::Mat &dstMat);
-	void CloseVideoFileName();
-	void ResizeVideoFrame();
+	void PostProcessDetections(StructRAWFrameSinkObject *rawFrameSinkObject);
+	bool OpenVideoFile(cv::Mat &dstMat);
+	bool FetchNextFrameFromVideo(cv::Mat &dstMat);
+	void CloseVideoFile();
 	int GetRemainingImagesCount();
-	void GetNextImage(char *outImagePath, char *outImageName);
+	void FetchNextImage(char *outImagePath, char *outImageName);
+	void ProcessSinkFramesInSequence();
 	void CopyVideoFileName(char *dstFilePath);
-	void SetCurrentImageName(std::string srcImageName, std::string workingImageName);
-	bool IsProcInSync();
-	void IncrementSyncCount();
 	void SignalEOS();
-	void PreProcessImage(char *inputImage);
-	
-	void CloneCurrentImage();
+	void EnqueueRAWFrame(StructRAWFrameSrcObject *rawFrameObject);
+	bool InitializeSinkResources(StructRAWFrameSrcObject *rawFrameObject, int fpsNum, int fpsDen);
+	bool ProcessSinkFrame(StructRAWFrameSinkObject *rawSinkFrameObject);
+	void FinalizeSinkResources();
+	void WaitForSync();
+
 
 };
 
