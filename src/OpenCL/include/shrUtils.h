@@ -38,7 +38,7 @@
 //#define GPU_PROFILING
 
 // Defines for GPU Architecture types (using the SM version to determine the # of cores per SM
-static int nGpuArchCoresPerSM[] = { -1, 8, 32 };
+//static int nGpuArchCoresPerSM[] = { -1, 8, 32 };
 // end of GPU Architecture definitions
 
 // Defines and enum for use with logging functions

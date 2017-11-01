@@ -8,16 +8,20 @@ KernelLauncher::KernelLauncher(cl_device_id device_id, cl_kernel *kernel, cl_com
     this->_dimensions = -1;
 	_device_id = device_id;
     _globalWorkSize[0] = _globalWorkSize[1] = _globalWorkSize[2] =
-            _localWorkSize[0] = _localWorkSize[1] = _localWorkSize[2] = NULL;
+            _localWorkSize[0] = _localWorkSize[1] = _localWorkSize[2] = 0;
 
     //Finding number of arguments in given kernel and making
     //an bool array to track its data content
     status = clGetKernelInfo(*_pKernel, CL_KERNEL_NUM_ARGS, sizeof(cl_int), &_numArgs, NULL);
-    DEBUG_CL(status);
+	if(status != CL_SUCCESS) {
+		
+		printf("ERROR - clGetKernelInfo() %d\n", status);
+		return;
+	}
+    //DEBUG_CL(status);
     printf("Number of kernel Arguments : %d %s \n",_numArgs, kernelName.c_str());
-    this->_argListData = (cl_bool*) malloc(_numArgs*sizeof(cl_bool));//new cl_bool[numArgs];
-    for(int i=0; i<_numArgs; i++)
-        this->_argListData[i] = false;
+	//_numArgs = std::min(_numArgs, 100);
+    this->_argListData = (cl_bool*) calloc(_numArgs, sizeof(cl_bool));//new cl_bool[numArgs];
 
 	cl_int err = clGetKernelWorkGroupInfo(*_pKernel, _device_id,
 		CL_KERNEL_WORK_GROUP_SIZE, sizeof(size_t), &_optimal_local_workgroup_size, NULL);
@@ -29,6 +33,12 @@ KernelLauncher::KernelLauncher(cl_device_id device_id, cl_kernel *kernel, cl_com
 		sizeof(size_t) * 3,
 		compileWorkGroupSize,
 		NULL);
+		
+	if(err != CL_SUCCESS) {
+		
+		printf("ERROR - clGetKernelWorkGroupInfo() %d\n", status);
+		return;
+	}
 
 	_kernel_name = kernelName;
 
@@ -75,9 +85,8 @@ float KernelLauncher::run(bool profile, bool block)
 
 	if (status != CL_SUCCESS) {
 
-		char * kernelName = (char*)_kernel_name.c_str();
-		int z = 0;
-		z++;
+		printf("ERROR - Kernel %s failed : %d\n", _kernel_name.c_str(), status);
+		
 	}
 
 	//DEBUG_CL(status);

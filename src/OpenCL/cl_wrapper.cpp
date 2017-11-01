@@ -1,26 +1,40 @@
 #include "cl_wrapper.hpp"
 #include "oclUtils.h"
 
-void CLSetup::init(char* deviceName)
+#ifdef WIN32
+#pragma warning(disable:4996)
+#endif
+
+bool CLSetup::init(const char *gpuDevType, char* deviceName)
 {
-    getPlatformID();
-    getDeviceID(deviceName);
-    getContextnQueue();
+	if (getPlatformID(gpuDevType)) {
+	
+		getDeviceID(deviceName);
+		getContextnQueue();
+		return true;
+	}
+	else
+		return false;
 }
 
-void CLSetup::getPlatformID()
+bool CLSetup::getPlatformID(const char *gpuDevType)
 {
 
 	cl_uint num_of_platforms = 0;
 	// get total number of available platforms:
 	cl_int err = CL_SUCCESS;
+	bool platform_found = false;
 	err = clGetPlatformIDs(0, 0, &num_of_platforms);
+
+	if (num_of_platforms == 0) {
+		
+		printf("ERROR - No OpenCL platforms found !\n");
+		return false;
+	}
 	
 	cl_platform_id* platforms = new cl_platform_id[num_of_platforms];
 	// get IDs for all platforms:
 	err = clGetPlatformIDs(num_of_platforms, platforms, 0);
-
-	cl_uint selected_platform_index = num_of_platforms;
 
 	for (cl_uint i = 0; i < num_of_platforms; ++i)
 	{
@@ -46,26 +60,17 @@ void CLSetup::getPlatformID()
 
 		// decide if this i-th platform is what we are looking for
 		// we select the first one matched skipping the next one if any
-		if (strstr(platform_name, /*"AMD"*/ "NVIDIA" /*"Intel(R) OpenCL"*/) &&
-			selected_platform_index == num_of_platforms)
+		if (err == CL_SUCCESS && strstr(platform_name, gpuDevType)) //"AMD" /*"NVIDIA"*/ /*"Intel(R) OpenCL"*/) &&
+			//selected_platform_index == num_of_platforms)
 		{
-			selected_platform_index = i;
 			_platformID = platforms[i];
-			// do not stop here, just see all available platforms
+			platform_found = true;
 		}
 
 		delete[] platform_name;
 	}
 
-
-    /// !TODO: Multiple Platforms
-    //    cl_platform_id* _platformID;
-    //    _status = clGetPlatformIDs(NUMBER_OF_PLATFORMS, NULL, &_numPlatforms);
-    //    DEBUG_CL(_status);
-    //    _platformID = (cl_platform_id *)malloc(sizeof(cl_platform_id) * _numPlatforms);
-    //    _status =clGetPlatformIDs(_numPlatforms, _platformID, NULL);
-    //    DEBUG_CL(_status);
-    //    _platformIDsVector.assign(_platformID[0], _platformID[_numPlatforms]);
+	return platform_found;
 }
 
 void CLSetup::getDeviceID(char *devName)
@@ -99,7 +104,7 @@ void CLSetup::getDeviceID(char *devName)
 
 void CLSetup::getContextnQueue()
 {
-	cl_command_queue_properties queueProps = NULL;// CL_QUEUE_PROFILING_ENABLE;
+	cl_command_queue_properties queueProps = 0;// CL_QUEUE_PROFILING_ENABLE;
     _context = clCreateContext(NULL, 1, &_deviceID, NULL, NULL, &_status);
     DEBUG_CL(_status);
     _queue = clCreateCommandQueue(_context, _deviceID, queueProps, &_status);

@@ -48,28 +48,11 @@ typedef struct {
 
 float sec(clock_t clocks);
 
-static const char* NN_KERNEL_NAMES[NN_MAX_KERNEL_COUNT] = {
-
-	"image2columarray3x3",
-	"image2columarray1x1",
-	"normalizearray",
-	"scalebias",
-	"addbias",
-	"scaleaddbias",
-	"normscaleaddbias",
-	"leakyactivatearray",
-	"linearactivatearray",
-	"flattenarray",
-	"softmax",
-	"maxpool",
-	"resetarray"
-};
-
 class OCLManager {
 
 public:
 
-	OCLManager();
+	OCLManager(const char *gpuDevstr);
 	~OCLManager();
 	int Initialize();
 	int Finalize();
@@ -122,6 +105,7 @@ private:
 	CLSetup				m_OpenCLSetup;
 	KernelLauncher*		m_OpenCLKernels[NN_MAX_KERNEL_COUNT];
 	char				m_DeviceName[256];
+	char			    m_GPUDevType[64];
 };
 
 

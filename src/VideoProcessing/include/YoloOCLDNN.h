@@ -25,7 +25,7 @@ limitations under the License.*/
 #include <iterator>
 #include <string>
 #include <sstream>
-#include <omp.h> 
+//#include <omp.h> 
 #include <numeric>
 #include <cairo.h>
 #include <mutex>
@@ -35,6 +35,10 @@ limitations under the License.*/
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui_c.h"
 #include "opencv2/opencv.hpp"
+
+#ifdef WIN32
+#pragma warning(disable:4996)
+#endif
 
 #ifdef __linux__
 #include <pthread.h>
@@ -63,6 +67,13 @@ extern "C" {
 
 
 void EnumerateFilesInDirectory(string srcFolder,  vector<string> &fileNames, vector<string> &imageNames);
+
+typedef enum {
+
+	SAVE_OUTPUT_TYPE_NONE = 0,
+	SAVE_OUTPUT_TYPE_JPEG = 1,
+	SAVE_OUTPUT_TYPE_VIDEO = 2
+}EnumSaveOPType;
 
 typedef enum {
 
@@ -271,7 +282,7 @@ private:
 	cairo_t						*m_Cairo;
 	cv::Mat						m_CairoTarget;
 	bool						m_EnableDisplay;
-	bool                        m_SaveOutput;
+	EnumSaveOPType              m_SaveOPType;
 
 	char						m_SrcVideoPath[FILENAME_MAX];
 	char                        m_CurrImageName[FILENAME_MAX];
@@ -285,6 +296,7 @@ private:
 	AVFormatContext				*m_AVFormatContext;
 	int							m_VideoStreamIdx;
 	AVCodecContext				*m_AVCodecCtx;
+	AVCodecParameters			*m_AVCodecParams;
 	AVCodec						*m_AVCodec;
 	AVFrame						*m_AVFrame;
 	AVFrame						*m_AVFrameRGB;
@@ -301,11 +313,8 @@ private:
 	std::queue<StructRAWFrameSinkObject*>	m_SinkFrameQueue;
 	std::mutex					m_SinkFrameQueueMutex;
 	bool						m_SinkActive;
-
-
 	LOGGERCALLBACK				logWriteFunc;
 	char						m_LogMsgStr[512];
-
 	int                         m_SinkFrameCount;
 	AVCodec						*m_AVSinkCodec;
 	AVCodecContext				*m_AVSinkCodecContext;
@@ -320,21 +329,17 @@ private:
 	int							m_SinkCopyRGBBytes;
 	uint8_t						*m_SinkRGBBuffer;
 	bool						m_AVIHeaderWritten;
-
 	int							m_FpsNum;
 	int							m_FpsDen;
-
 	EnumThreadStatus			m_SinkThreadStatus;
+	char						m_GPUDevType[64];
 
 #ifdef __linux__
 	pthread_t 			m_ProcSrcThread;
 	pthread_t 			m_ProcSinkThread;
 #endif
 
-
-
 	static inline float LogisticActivate(float x) { return (float)(1. / (1. + exp(-x))); }
-
 	bool ParseNetworkConfiguration();
 	bool PrepareConvolutionalTypeLayer(int sectionIdx, int layerIdx, StructLayerFeedParams *layerFeedParams);
 	bool PrepareRegionTypeLayer(int sectionIdx, int layerIdx, StructLayerFeedParams *layerFeedParams);
@@ -354,16 +359,14 @@ private:
 
 public:
 
-	YOLONeuralNet(LOGGERCALLBACK loggerCallback, char* classLabelsFile, char *networkConfigFile, char *weightsFile,
-		bool display, bool saveOutput, float threshold, float nmsOverlap);
+	YOLONeuralNet(LOGGERCALLBACK loggerCallback, char *gpuDevStr, char* classLabelsFile, char *networkConfigFile, char *weightsFile,
+		bool display, EnumSaveOPType saveOPType, float threshold, float nmsOverlap);
 	~YOLONeuralNet();
-
 	inline int GetDNNWidth() { return m_YOLODeepNN->m_W; };
 	inline int GetDNNHeight() { return m_YOLODeepNN->m_H; };
 	inline bool SinkAlive() { return m_SinkActive; };
 	inline int GetFPSNum() { return m_FpsNum; };
 	inline int GetFPSDen() { return m_FpsDen; };
-
 	bool Initialize();
 	void Finalize();
 	void ProcessSingleImage(char* inputFile);
@@ -383,8 +386,6 @@ public:
 	bool ProcessSinkFrame(StructRAWFrameSinkObject *rawSinkFrameObject);
 	void FinalizeSinkResources();
 	void WaitForSync();
-
-
 };
 
 

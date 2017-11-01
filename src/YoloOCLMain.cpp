@@ -93,12 +93,15 @@ int main(int argc, char* argv[]) {
 	char	inputFolder[FILENAME_MAX];
 	char	inputVideo[FILENAME_MAX];
 	char	logMsg[512];
+	char    gpuDevType[64];
 	int		enableDisplay = 0;
 	int		saveOutput = 0;
 	int     inputType = 0;
 	float   detThreshold = 0.2f;
 	float   nmsOverlap = 0.45f;
+	EnumSaveOPType saveOPType = EnumSaveOPType::SAVE_OUTPUT_TYPE_NONE;
 
+	sprintf(gpuDevType, "AMD");
 
 #ifdef WIN32
 	sprintf(m_LogFilePath, "%s\\YoloOCLInference.log", currentDir.c_str());
@@ -161,6 +164,23 @@ int main(int argc, char* argv[]) {
 				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
+
+			if (saveOutput == 0) {
+				
+				saveOPType = EnumSaveOPType::SAVE_OUTPUT_TYPE_NONE;
+				logWrite("Saving output disabled", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+			}
+			else if (saveOutput == 1) {
+			
+				saveOPType = EnumSaveOPType::SAVE_OUTPUT_TYPE_JPEG;
+				logWrite("Saving JPEG images as output", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+			}
+			else if (saveOutput == 2) {
+			
+				saveOPType = EnumSaveOPType::SAVE_OUTPUT_TYPE_VIDEO;
+				logWrite("Saving video file as output", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+			}
+
 		}
 		else if (strcmp(argv[i], "-det_threshold") == 0) {
 
@@ -179,6 +199,16 @@ int main(int argc, char* argv[]) {
 				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 				return -1;
 			}
+		}
+		else if (strcmp(argv[i], "-gpu_type") == 0) {
+
+			if (++i >= argc) {
+
+				sprintf(logMsg, "ERROR - Invalid param for %s", argv[i - 1]);
+				logWrite(std::string(logMsg), EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+				return -1;
+			}
+			strcpy(gpuDevType, argv[i]);
 		}
 	}
 
@@ -204,27 +234,28 @@ int main(int argc, char* argv[]) {
 	
 
 	logWrite("Creating YOLONeuralNet Object", EnumLogMsgType::LOG_MSG_TYPE_INFO);
-	m_YOLODeepNNObj = new YOLONeuralNet(logWrite, labelsFile, configFile, weightsFile,
-		(enableDisplay == 1)?true:false, (saveOutput == 1)?true:false, detThreshold, nmsOverlap);
-	m_YOLODeepNNObj->Initialize();
+	m_YOLODeepNNObj = new YOLONeuralNet(logWrite, gpuDevType, labelsFile, configFile, weightsFile,
+		(enableDisplay == 1)?true:false, saveOPType, detThreshold, nmsOverlap);
+	if (m_YOLODeepNNObj->Initialize()) {
+
+		if ((inputType >> 0) & 1) {
+
+			logWrite("YOLONeuralNet - Operating in single image mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
+			m_YOLODeepNNObj->ProcessSingleImage(inputImage);
+		}
+		else if ((inputType >> 1) & 1) {
+
+			logWrite("YOLONeuralNet - Operating in batch image mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
+			m_YOLODeepNNObj->ProcessImageBatch(inputFolder);
+		}
+		else if ((inputType >> 2) & 1) {
+
+			logWrite("YOLONeuralNet - Operating in video file mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
+			m_YOLODeepNNObj->ProcessVideo(inputVideo);
+		}
+		m_YOLODeepNNObj->Finalize();
+	}
 	
-	if ((inputType >> 0) & 1) {
-
-		logWrite("YOLONeuralNet - Operating in single image mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
-		m_YOLODeepNNObj->ProcessSingleImage(inputImage);
-	}
-	else if ((inputType >> 1) & 1) {
-
-		logWrite("YOLONeuralNet - Operating in batch image mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
-		m_YOLODeepNNObj->ProcessImageBatch(inputFolder);
-	}
-	else if ((inputType >> 2) & 1) {
-
-		logWrite("YOLONeuralNet - Operating in video file mode", EnumLogMsgType::LOG_MSG_TYPE_INFO);
-		m_YOLODeepNNObj->ProcessVideo(inputVideo);
-	}
-
-	m_YOLODeepNNObj->Finalize();
 	delete m_YOLODeepNNObj;
 
 	logWrite("*************END*************");

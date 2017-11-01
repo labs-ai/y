@@ -67,9 +67,12 @@ YoloOCLInference supports processing the following input types
 * Folder containing images
 * Video file
 
+An OpenCL device type can be specified using argument **-gpu_type** in case there are multiple devices present on the target machine. The allowed values of **-gpu_type** are **NVIDIA**, **AMD** & **ARM**. 
+If unspecified, the default value is assumed to be **AMD**.
+
 Two output options are currently supported
 * Displaying the output with detections by setting **-display** argument to 1. In this case, an OpenCV output window with detections will pause for user input before proceeding onto running inference on next frame.
-* The overlayed detections can be saved as H.264 AVI video. Set **-save** argument to 1. In this case, the inference output with deections is saved as an AVI file, **InferenceOutput.avi** within **output** directory of the build directory.
+* The overlayed detections can be saved as JPEG images or H.264 AVI video. Set **-save** argument to 1 or 2 accordingly. In this case, the inference output with detections is will be saved to JPEG images or as an AVI file, **InferenceOutput.avi** within **output** directory of the build directory.
 
 Additionally two input arguments **-det_threshold** and **-nms_overlap** are supported that affect the detector output
 * **det_threshold** - Controls sensitivity of the detector 
@@ -78,25 +81,25 @@ Additionally two input arguments **-det_threshold** and **-nms_overlap** are sup
 If these values are not supplied, then 0.2 & 0.45 are applied by default.
 
 Processing a single image.
- > YoloOCLInference.exe -input image -display <0/1> -save <0/1> -det_threshold 0.2 -nms_overlap 0.45
+ > YoloOCLInference.exe -gpu_type NVIDIA -input image -display <0/1> -save <0/1/2> -det_threshold 0.2 -nms_overlap 0.45
     
 Processing a batch of images. Presently, only JPG and PNG images are supported. All images within the folder must be of same resolution (variable resolution is not supported presently).
- > YoloOCLInference.exe -folder folder -display <0/1> -save <0/1>
+ > YoloOCLInference.exe -gpu_type NVIDIA -folder folder -display <0/1> -save <0/1/2>
 
 Processing a video.
-> YoloOCLInference.exe -video video -display <0/1> -save <0/1> -det_threshold 0.2 -nms_overlap 0.45
+> YoloOCLInference.exe -gpu_type NVIDIA -video video -display <0/1> -save <0/1/2> -det_threshold 0.2 -nms_overlap 0.45
 
  examples:  
- > YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
+ > YoloOCLInference.exe -gpu_type NVIDIA -input pedestrians.jpg -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
- > YoloOCLInference.exe -folder "C:\Dataset\frames" -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
+ > YoloOCLInference.exe -gpu_type NVIDIA -folder "C:\Dataset\frames" -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
- > YoloOCLInference.exe -video "C:\Dataset\testvideo.mp4" -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
+ > YoloOCLInference.exe -gpu_type NVIDIA -video "C:\Dataset\testvideo.mp4" -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
 If you prefer to let the engine free-flow without any display or saving options, the benchmarks reported here can be reproduced. 
 The relvant command in this case would be 
 
-> YoloOCLInference.exe -input pedestrians.jpg -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
+> YoloOCLInference.exe -gpu_type NVIDIA -input pedestrians.jpg -display 0 -save 0 -det_threshold 0.2 -nms_overlap 0.45
  
 ## Future work
 * Display detected objects class names as text overlay.

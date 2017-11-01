@@ -17,6 +17,24 @@ limitations under the License.*/
 
 #define BLOCK 8
 
+
+const char* NN_KERNEL_NAMES[NN_MAX_KERNEL_COUNT] = {
+
+	"image2columarray3x3",
+	"image2columarray1x1",
+	"normalizearray",
+	"scalebias",
+	"addbias",
+	"scaleaddbias",
+	"normscaleaddbias",
+	"leakyactivatearray",
+	"linearactivatearray",
+	"flattenarray",
+	"softmax",
+	"maxpool",
+	"resetarray"
+};
+
 #ifdef WIN32
 
 #include <Windows.h>
@@ -49,9 +67,11 @@ typedef struct {
 	int m_NumZ;
 }StructOCLDims;
 
-OCLManager::OCLManager() {
+OCLManager::OCLManager(const char* gpuDevStr) {
 
 	m_OpenCLProgram = NULL;
+
+	strcpy(m_GPUDevType, gpuDevStr);
 
 	for(int i = 0; i < NN_MAX_KERNEL_COUNT; i++)
 		m_OpenCLKernels[i] = 0;
@@ -77,6 +97,13 @@ OCLManager::~OCLManager() {
 int OCLManager::Initialize() {
 
 	std::string file;
+
+	if (!m_OpenCLSetup.init(m_GPUDevType, m_DeviceName)) {
+
+		printf("ERROR : Failed to enumerate OpenCL device type : %s\n", m_GPUDevType);
+		return -1;
+	}
+
 	
 #ifdef WIN32
 	file = ExePath() + "\\DeepNNFP32.cl";
@@ -87,7 +114,8 @@ int OCLManager::Initialize() {
 	std::vector<std::string> kernelFiles;
 	kernelFiles.push_back(file);
 
-	m_OpenCLSetup.init(m_DeviceName);
+	
+
 	m_OpenCLProgram = m_OpenCLSetup.createProgram(kernelFiles);
 	m_OpenCLProgram->buildProgram();
 
@@ -215,13 +243,12 @@ float OCLManager::ResetArray(int N, OCLBuffer *inArray, OCLBuffer *biasArray, in
 	if (globalDimX % BLOCK != 0)
 		globalDimX = ((globalDimX + BLOCK) / BLOCK) * BLOCK;
 
-	float execTime = 0.0f;
-
 	m_OpenCLKernels[NN_KERNEL_IDX_RESETARR]->pGlobal(globalDimX)->pLocal(BLOCK);
 	m_OpenCLKernels[NN_KERNEL_IDX_RESETARR]->arg(0, inArray->getMem());
 	m_OpenCLKernels[NN_KERNEL_IDX_RESETARR]->arg(1, biasArray);
 	m_OpenCLKernels[NN_KERNEL_IDX_RESETARR]->arg(2, filtSize);
 	return m_OpenCLKernels[NN_KERNEL_IDX_RESETARR]->run(PROFILE_KERNELS, BLOCK_KERNEL_EXEC);
+
 }
 
 float OCLManager::ConvertImageToColumnArray(OCLBuffer *im, int channels, int height, int width,
@@ -270,9 +297,9 @@ float OCLManager::ComputeGEMM(bool isATransponsed, bool isBTransposed, const siz
 
 			clWaitForEvents(1, &execEvent);
 			long long start, end;
-			cl_int status = clGetEventProfilingInfo(execEvent, CL_PROFILING_COMMAND_START,
+			clGetEventProfilingInfo(execEvent, CL_PROFILING_COMMAND_START,
 				sizeof(start), &start, NULL);
-			status = clGetEventProfilingInfo(execEvent, CL_PROFILING_COMMAND_END,
+			clGetEventProfilingInfo(execEvent, CL_PROFILING_COMMAND_END,
 				sizeof(end), &end, NULL);
 
 			total = (double)(end - start) / 1e6;
@@ -310,15 +337,12 @@ float OCLManager::BatchNorm(OCLBuffer *x, OCLBuffer *mean, OCLBuffer *variance, 
 
 float OCLManager::ScaleBias(OCLBuffer *output, OCLBuffer *biases, int batch, int n, int size) {
 
-	float execTime = 0.0f;
 	m_OpenCLKernels[NN_KERNEL_IDX_SCALEBIAS]->pGlobal(size, n)->pLocal(1, 1);
 	m_OpenCLKernels[NN_KERNEL_IDX_SCALEBIAS]->arg(0, output->getMem());
 	m_OpenCLKernels[NN_KERNEL_IDX_SCALEBIAS]->arg(1, biases->getMem());
 	m_OpenCLKernels[NN_KERNEL_IDX_SCALEBIAS]->arg(2, n);
 	m_OpenCLKernels[NN_KERNEL_IDX_SCALEBIAS]->arg(3, size);
-	execTime += m_OpenCLKernels[NN_KERNEL_IDX_SCALEBIAS]->run(PROFILE_KERNELS, BLOCK_KERNEL_EXEC);
-
-	return execTime;
+	return m_OpenCLKernels[NN_KERNEL_IDX_SCALEBIAS]->run(PROFILE_KERNELS, BLOCK_KERNEL_EXEC);
 }
 
 float OCLManager::AddBias(OCLBuffer *output, OCLBuffer *biases, int batch, int n, int size) { //, int activationType) {
@@ -341,8 +365,6 @@ float OCLManager::ScaleAddBias(OCLBuffer *output, OCLBuffer *scales, OCLBuffer *
 	int globalDimX = size / BLOCK;
 	if (globalDimX % BLOCK != 0)
 		globalDimX = ((globalDimX + BLOCK) / BLOCK) * BLOCK;
-
-	float execTime = 0.0f;
 
 	m_OpenCLKernels[NN_KERNEL_IDX_SCALEADDBIAS]->pGlobal(globalDimX, n)->pLocal(BLOCK, 1);
 	m_OpenCLKernels[NN_KERNEL_IDX_SCALEADDBIAS]->arg(0, output->getMem());
@@ -468,7 +490,7 @@ void OCLManager::TestCLBlastLibHalfFloat() {
 
 void OCLManager::TestCLBlastLib() {
 
-	const size_t m = 32;// 128;
+	/*const size_t m = 32;// 128;
 	const size_t n = 43264;// 64;
 	const size_t k = 144;// 512;
 	const float alpha = 0.7f;
@@ -477,16 +499,6 @@ void OCLManager::TestCLBlastLib() {
 	const size_t b_ld = n;
 	const size_t c_ld = n;
 	
-	/*const cl_half alpha = FloatToHalf(0.5f);
-
-	cl_half* host_a = (cl_half*)malloc(sizeof(cl_half)*n);
-	cl_half* host_b = (cl_half*)malloc(sizeof(cl_half)*n);
-	for (size_t i = 0; i<n; ++i) { host_a[i] = FloatToHalf(2.2f); }
-	for (size_t i = 0; i<n; ++i) { host_b[i] = FloatToHalf(0.4f); }
-	printf("Input values at index 0: alpha * a[0] + b[0] == %.3lf * %.3lf + %.3lf\n",
-		HalfToFloat(alpha), HalfToFloat(host_a[0]), HalfToFloat(host_b[0]));
-		*/
-
 	float* host_a = (float*)malloc(sizeof(float)*m*k);
 	float* host_b = (float*)malloc(sizeof(float)*n*k);
 	float* host_c = (float*)malloc(sizeof(float)*m*n);
@@ -515,38 +527,14 @@ void OCLManager::TestCLBlastLib() {
 
 	auto timings = std::vector<double>(1);
 
-	
-	/*for (auto &timing : timings) {
-
-		const auto start_time = std::chrono::steady_clock::now();
-
-		CLBlastStatusCode status = CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeNo, CLBlastTransposeNo,
-			m, n, k, alpha, device_a->getMem(), 0, a_ld,
-			device_b->getMem(), 0, b_ld, beta, device_c->getMem(), 0, c_ld, m_OpenCLSetup.getQueue(), &event);
-
-		if (status == CLBlastSuccess) {
-
-			clWaitForEvents(1, &event);
-			clReleaseEvent(event);
-		}
-
-		
-		const auto elapsed_time = std::chrono::steady_clock::now() - start_time;
-		
-		timing = std::chrono::duration<double, std::milli>(elapsed_time).count();
-		printf("CLBlastSgemm() Execution Time : %f\n\n", timing);
-	}*/
-
 	printf("CLBlastSgemm() Execution Time : %f\n\n", *std::min_element(timings.begin(), timings.end()));
 	free(host_c);
 	delete device_a;
 	delete device_b;
 	delete device_c;
 
-	
-
 	free(host_a);
-	free(host_b);
+	free(host_b);*/
 }
 
 
@@ -781,3 +769,34 @@ return m_OpenCLKernels[NN_KERNEL_IDX_COPYARR]->run(PROFILE_KERNELS, BLOCK_KERNEL
 //printf("CopyArray speed is %f : \n", sec(clock() - time));
 }
 */
+/*const cl_half alpha = FloatToHalf(0.5f);
+
+cl_half* host_a = (cl_half*)malloc(sizeof(cl_half)*n);
+cl_half* host_b = (cl_half*)malloc(sizeof(cl_half)*n);
+for (size_t i = 0; i<n; ++i) { host_a[i] = FloatToHalf(2.2f); }
+for (size_t i = 0; i<n; ++i) { host_b[i] = FloatToHalf(0.4f); }
+printf("Input values at index 0: alpha * a[0] + b[0] == %.3lf * %.3lf + %.3lf\n",
+HalfToFloat(alpha), HalfToFloat(host_a[0]), HalfToFloat(host_b[0]));
+*/
+
+
+/*for (auto &timing : timings) {
+
+const auto start_time = std::chrono::steady_clock::now();
+
+CLBlastStatusCode status = CLBlastSgemm(CLBlastLayoutRowMajor, CLBlastTransposeNo, CLBlastTransposeNo,
+m, n, k, alpha, device_a->getMem(), 0, a_ld,
+device_b->getMem(), 0, b_ld, beta, device_c->getMem(), 0, c_ld, m_OpenCLSetup.getQueue(), &event);
+
+if (status == CLBlastSuccess) {
+
+clWaitForEvents(1, &event);
+clReleaseEvent(event);
+}
+
+
+const auto elapsed_time = std::chrono::steady_clock::now() - start_time;
+
+timing = std::chrono::duration<double, std::milli>(elapsed_time).count();
+printf("CLBlastSgemm() Execution Time : %f\n\n", timing);
+}*/

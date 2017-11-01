@@ -197,17 +197,19 @@ EnumYOLODeepNNActivationType MapNNLayerActivationStr(char *activationStr) {
 }
 
 
-YOLONeuralNet::YOLONeuralNet(LOGGERCALLBACK loggerCallback, char* classLabelsFile, char *networkConfigFile,  char *weightsFile, 
-	bool display, bool saveOutput, float threshold, float nmsOverlap) {
+YOLONeuralNet::YOLONeuralNet(LOGGERCALLBACK loggerCallback, char *gpuDevType, char* classLabelsFile, char *networkConfigFile,  char *weightsFile,
+	bool display, EnumSaveOPType saveOPType, float threshold, float nmsOverlap) {
+
 
 	logWriteFunc = loggerCallback;
 	externLogFunc = loggerCallback;
+	strcpy(m_GPUDevType, gpuDevType);
 	strcpy(m_ClassLabelsFile, classLabelsFile);
 	strcpy(m_NetworkConfigFile, networkConfigFile);
 	strcpy(m_WeightsFile, weightsFile);
 	m_CairoSurface = NULL;
 	m_EnableDisplay = display;
-	m_SaveOutput = saveOutput;
+	m_SaveOPType = saveOPType;
 	m_DetThreshold = threshold;
 	m_NMSOverlap = nmsOverlap;
 	m_VideoFileEOS = false;
@@ -246,7 +248,7 @@ bool YOLONeuralNet::ParseNetworkConfiguration() {
 
 	m_YOLODeepNN->m_GpuIndex = 0; // TODO : Pass this as part of configuration
 	m_YOLODeepNN->m_BatchSize = (int)m_IniReader->GetDoubleValue("net", "batch", 1);
-	int subDivs = (int)m_IniReader->GetDoubleValue("net", "subdivisions", 1);
+	//int subDivs = (int)m_IniReader->GetDoubleValue("net", "subdivisions", 1);
 	m_YOLODeepNN->m_TimeSteps = (int)m_IniReader->GetDoubleValue("net", "time_steps", 1);
 	m_YOLODeepNN->m_H = (int)m_IniReader->GetDoubleValue("net", "height", 0);
 	m_YOLODeepNN->m_W = (int)m_IniReader->GetDoubleValue("net", "width", 0);
@@ -553,7 +555,7 @@ bool YOLONeuralNet::ParseNNWeights() {
 	fread(&revNum, sizeof(int), 1, fp);
 	fread(&totalExamples, sizeof(int), 1, fp);
 
-	int isTransposeEnabled = (majorRev > 1000) || (minorRev > 1000);
+	//int isTransposeEnabled = (majorRev > 1000) || (minorRev > 1000);
 
 	for (int i = 0; i < m_YOLODeepNN->m_TotalLayers ; ++i) {
 
@@ -645,10 +647,11 @@ bool YOLONeuralNet::Initialize() {
 	m_IniReader = new CSimpleIniA(false, false, false);
 	m_IniReader->LoadFile(m_NetworkConfigFile);
 
-	m_OCLManager = new OCLManager();
+	m_OCLManager = new OCLManager(m_GPUDevType);
 	if (m_OCLManager->Initialize() != OCL_STATUS_READY) {
 	
 		//Log error
+		logWriteFunc("Failed to initialize OCLManager object", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 		return false;
 	}
 
@@ -656,7 +659,7 @@ bool YOLONeuralNet::Initialize() {
 
 
 	m_YOLODeepNN = new StructYOLODeepNN;
-	memset(m_YOLODeepNN, 0, sizeof(m_YOLODeepNN));
+	memset(m_YOLODeepNN, 0, sizeof(StructYOLODeepNN));
 	ParseNetworkConfiguration();
 	ParseNNLayers();
 	ParseNNWeights();
@@ -938,20 +941,10 @@ void DrawDetections(StructImage *im, int num, float thresh, StructDetectionBBox 
 
 		if (prob > thresh) {
 
-			int width = (int)(im->m_H * .009);
-
-			//if(m_)
-				//printf("%s: %.0f%%\n", names[classidx].c_str(), prob * 100);
-
 			int offset = classidx * 123457 % classes;
 			float red = get_color(2, offset, classes);
 			float green = get_color(1, offset, classes);
 			float blue = get_color(0, offset, classes);
-			float rgb[3];
-
-			rgb[0] = red;
-			rgb[1] = green;
-			rgb[2] = blue;
 			StructDetectionBBox b = boxes[i];
 
 			int left = (int)((b.m_X - b.m_W / 2.) * im->m_W);
@@ -969,9 +962,7 @@ void DrawDetections(StructImage *im, int num, float thresh, StructDetectionBBox 
 			overlayRect.width = right - left;
 			overlayRect.height = bot - top;
 
-			//cv::rectangle((cv::Mat)renderImage, overlayRect, cv::Scalar(blue * 255, green * 255, red * 255), 2);
 			cv::rectangle(renderMat, overlayRect, cv::Scalar(blue * 255, green * 255, red * 255), 2);
-			//draw_box_width(im, left, top, right, bot, width, red, green, blue);
 		}
 	}
 }
@@ -1029,7 +1020,7 @@ void YOLONeuralNet::PutCairoOverlay(
 
 int YOLONeuralNet::GetRemainingImagesCount() {
 
-	return m_ImageBatch.size();
+	return (int)m_ImageBatch.size();
 }
 
 void YOLONeuralNet::FetchNextImage(char *outImagePath, char *outImageName) {
@@ -1069,7 +1060,7 @@ bool YOLONeuralNet::OpenVideoFile(cv::Mat &dstMat) {
 	}
 
 	m_VideoStreamIdx = -1;
-	for (int i = 0; i < m_AVFormatContext->nb_streams; i++) {
+	for (unsigned int i = 0; i < m_AVFormatContext->nb_streams; i++) {
 
 		if (m_AVFormatContext->streams[i]->codec->coder_type == AVMEDIA_TYPE_VIDEO) {
 
@@ -1227,7 +1218,7 @@ StructRAWFrameSrcObject* InitializeRAWFrameObject(char const* fileName, cv::Mat 
 	int h = srcRAWFrameObject->m_CurrentImageMat.rows;
 	int w = srcRAWFrameObject->m_CurrentImageMat.cols;
 	int c = srcRAWFrameObject->m_CurrentImageMat.channels();
-	int step = srcRAWFrameObject->m_CurrentImageMat.step;
+	int step = (int)srcRAWFrameObject->m_CurrentImageMat.step;
 
 	srcRAWFrameObject->m_SrcImage = new StructImage;
 	srcRAWFrameObject->m_SrcImage->m_DataArray = (float*)calloc(h*w*c, sizeof(float));
@@ -1442,7 +1433,6 @@ void FinalizeRAWFrameObject(StructRAWFrameSrcObject *rawFrameObject) {
 
 void YOLONeuralNet::ProcessSinkFramesInSequence() {
 
-	bool success = false;
 	StructRAWFrameSinkObject *outSinkObject = NULL;
 	bool initStatus = false;
 
@@ -1457,7 +1447,7 @@ void YOLONeuralNet::ProcessSinkFramesInSequence() {
 			m_SinkFrameQueue.pop();
 			m_SinkFrameQueueMutex.unlock();
 
-			if (m_SaveOutput && !initStatus) {
+			if (m_SaveOPType == EnumSaveOPType::SAVE_OUTPUT_TYPE_VIDEO && !initStatus) {
 
 				//Prepare Encoder
 				if(InitializeSinkResources(outSinkObject->m_RAWSrcObject, GetFPSNum(), GetFPSDen()))
@@ -1482,7 +1472,7 @@ void YOLONeuralNet::ProcessSinkFramesInSequence() {
 			WaitMilliSecs(2);
 	}
 
-	if(m_SaveOutput) {
+	if(m_SaveOPType == EnumSaveOPType::SAVE_OUTPUT_TYPE_VIDEO) {
 
 		logWriteFunc("Finalizing Sink Resources", EnumLogMsgType::LOG_MSG_TYPE_INFO);
 		FinalizeSinkResources();
@@ -1541,13 +1531,11 @@ void* ProcessOutput(void *ptr) {
 
 bool YOLONeuralNet::InitializeSinkResources(StructRAWFrameSrcObject *rawFrameSinkObject, int fpsNum, int fpsDen) {
 
-	char outFileName[512];
-
-	sprintf(outFileName, "%s//InferenceOutput.avi", m_OutFolder);
+	std::string outFileName = m_OutFolder + std::string("//InferenceOutput.avi");
 
 	m_SinkFrameCount = 0;
 	m_AVSinkCodec = avcodec_find_encoder(AV_CODEC_ID_H264); 
-	m_AVSinkFormat = av_guess_format(NULL, outFileName, NULL);
+	m_AVSinkFormat = av_guess_format(NULL, outFileName.c_str(), NULL);
 	m_AVSinkFormatContext = NULL;
 	if (avformat_alloc_output_context2(&m_AVSinkFormatContext, m_AVSinkFormat, NULL, NULL) < 0) {
 
@@ -1586,7 +1574,7 @@ bool YOLONeuralNet::InitializeSinkResources(StructRAWFrameSrcObject *rawFrameSin
 		return false;
 	}
 
-	if (avio_open2(&m_AVSinkFormatContext->pb, outFileName, AVIO_FLAG_WRITE, NULL, NULL) < 0) {
+	if (avio_open2(&m_AVSinkFormatContext->pb, outFileName.c_str(), AVIO_FLAG_WRITE, NULL, NULL) < 0) {
 
 		logWriteFunc("Failed to open output AVI file", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
 		return false;
@@ -1627,40 +1615,49 @@ bool YOLONeuralNet::InitializeSinkResources(StructRAWFrameSrcObject *rawFrameSin
 
 bool YOLONeuralNet::ProcessSinkFrame(StructRAWFrameSinkObject *rawSinkFrameObject) {
 
-	AVPacket avPacket;
-	avPacket.data = NULL;
-	avPacket.size = 0;
-	int encodeResult = -1;
-	m_AVSinkFrame->pts = m_SinkFrameCount;
-	av_init_packet(&avPacket);
 
-	memcpy(m_AVSinkRGBFrame->data[0], rawSinkFrameObject->m_RAWSrcObject->m_DisplayImageMat.data, m_SinkCopyRGBBytes);
+	if (m_SaveOPType == EnumSaveOPType::SAVE_OUTPUT_TYPE_JPEG) {
 
-	int result = sws_scale(m_SinkConvertCtx, ((AVPicture*)m_AVSinkRGBFrame)->data, ((AVPicture*)m_AVSinkRGBFrame)->linesize, 0,
-		m_AVSinkRGBFrame->height, ((AVPicture *)m_AVSinkFrame)->data, ((AVPicture *)m_AVSinkFrame)->linesize);
-
-	if(avcodec_encode_video2(m_AVSinkStream->codec, &avPacket, m_AVSinkFrame, &encodeResult) < 0) {
-	
-		logWriteFunc("Failed to encode frame in AVI file", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
-		return false;
+		char outJPEGfile[4*FILENAME_MAX];
+		sprintf(outJPEGfile, "%s//frame_%06d.jpg", m_OutFolder, m_SinkFrameCount);
+		cv::imwrite(outJPEGfile, rawSinkFrameObject->m_RAWSrcObject->m_DisplayImageMat);
 	}
+	else if(m_SaveOPType == EnumSaveOPType::SAVE_OUTPUT_TYPE_VIDEO){
 
-	if (encodeResult) {
+		AVPacket avPacket;
+		avPacket.data = NULL;
+		avPacket.size = 0;
+		int encodeResult = -1;
+		m_AVSinkFrame->pts = m_SinkFrameCount;
+		av_init_packet(&avPacket);
 
-		if (avPacket.pts != AV_NOPTS_VALUE)
-			avPacket.pts = av_rescale_q(avPacket.pts, m_AVSinkStream->codec->time_base, m_AVSinkFormatContext->streams[0]->codec->time_base);
-		if (avPacket.dts != AV_NOPTS_VALUE)
-			avPacket.dts = av_rescale_q(avPacket.dts, m_AVSinkStream->codec->time_base, m_AVSinkFormatContext->streams[0]->codec->time_base);
-		if (avPacket.duration > 0)
-			avPacket.duration = (int)av_rescale_q(avPacket.duration, m_AVSinkStream->codec->time_base, m_AVSinkFormatContext->streams[0]->codec->time_base);
+		memcpy(m_AVSinkRGBFrame->data[0], rawSinkFrameObject->m_RAWSrcObject->m_DisplayImageMat.data, m_SinkCopyRGBBytes);
 
-		if (m_AVSinkStream->codec->coded_frame->key_frame)
-			avPacket.flags |= AV_PKT_FLAG_KEY;
+		sws_scale(m_SinkConvertCtx, ((AVPicture*)m_AVSinkRGBFrame)->data, ((AVPicture*)m_AVSinkRGBFrame)->linesize, 0,
+			m_AVSinkRGBFrame->height, ((AVPicture *)m_AVSinkFrame)->data, ((AVPicture *)m_AVSinkFrame)->linesize);
 
-		av_interleaved_write_frame(m_AVSinkFormatContext, &avPacket);
-		av_free_packet(&avPacket);
+		if (avcodec_encode_video2(m_AVSinkStream->codec, &avPacket, m_AVSinkFrame, &encodeResult) < 0) {
+
+			logWriteFunc("Failed to encode frame in AVI file", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+			return false;
+		}
+
+		if (encodeResult) {
+
+			if (avPacket.pts != AV_NOPTS_VALUE)
+				avPacket.pts = av_rescale_q(avPacket.pts, m_AVSinkStream->codec->time_base, m_AVSinkFormatContext->streams[0]->codec->time_base);
+			if (avPacket.dts != AV_NOPTS_VALUE)
+				avPacket.dts = av_rescale_q(avPacket.dts, m_AVSinkStream->codec->time_base, m_AVSinkFormatContext->streams[0]->codec->time_base);
+			if (avPacket.duration > 0)
+				avPacket.duration = (int)av_rescale_q(avPacket.duration, m_AVSinkStream->codec->time_base, m_AVSinkFormatContext->streams[0]->codec->time_base);
+
+			if (m_AVSinkStream->codec->coded_frame->key_frame)
+				avPacket.flags |= AV_PKT_FLAG_KEY;
+
+			av_interleaved_write_frame(m_AVSinkFormatContext, &avPacket);
+			av_packet_unref(&avPacket);
+		}
 	}
-
 	m_SinkFrameCount++;
 }
 
@@ -1735,7 +1732,19 @@ void YOLONeuralNet::ProcessVideo(char *srcVideoPath) {
 		printf("Error creating directory %s! \n", m_OutFolder);
 
 	int iret = pthread_create(&m_ProcSinkThread, NULL, ProcessOutput, this);
+	if (iret != 0) {
+		
+		logWriteFunc("Failed to create ProcessOutput thread", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+		return;
+	}
+
 	iret = pthread_create(&m_ProcSrcThread, NULL, ProcessVideoInput, this);
+	if (iret != 0) {
+
+		logWriteFunc("Failed to create ProcessVideoInput thread", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+		return;
+	}
+
 
 #endif
 
@@ -1833,15 +1842,20 @@ void YOLONeuralNet::ProcessImageBatch(char *srcFolder) {
 	void *pthreadStatus;
 
 	strcpy(m_OutFolder, "output");
-	const int dirErr = mkdir(m_OutFolder, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-	if (dirErr == -1)
-		printf("Error creating directory %s! \n", m_OutFolder);
-
-	//for(int i = 0; i < m_ImageBatch.size(); i++)
-	//	printf("Image path : %s name %s\n", m_ImageBatch[i].c_str(), m_ImageNames[i].c_str());
-
+	mkdir(m_OutFolder, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
 	int iret = pthread_create(&m_ProcSinkThread, NULL, ProcessOutput, this);
+	if (iret != 0) {
+
+		logWriteFunc("Failed to create ProcessOutput thread", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+		return;
+	}
+
 	iret = pthread_create(&m_ProcSrcThread, NULL, ProcessBatchInput, this);
+	if (iret != 0) {
+
+		logWriteFunc("Failed to create ProcessBatchInput thread", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+		return;
+	}
 	
 
 #endif
@@ -1971,6 +1985,12 @@ void YOLONeuralNet::ProcessSingleImage(char* inputFile) {
 	//	printf("Image path : %s name %s\n", m_ImageBatch[i].c_str(), m_ImageNames[i].c_str());
 
 	int iret = pthread_create(&m_ProcSrcThread, NULL, ProcessOutput, this);
+	if (iret != 0) {
+
+		logWriteFunc("Failed to create ProcessOutput thread", EnumLogMsgType::LOG_MSG_TYPE_ERROR);
+		return;
+	}
+
 
 #endif
 
@@ -2015,6 +2035,11 @@ void YOLONeuralNet::ProcessSingleImage(char* inputFile) {
 		sprintf(m_LogMsgStr, "YoloOCLInference DNN Avg Proc Speed{ Time, FPS } : {%f, %f}", avgSpeed, 1000 / avgSpeed);
 		logWriteFunc(m_LogMsgStr, EnumLogMsgType::LOG_MSG_TYPE_INFO);
 	}
+
+#ifdef __linux__
+
+	pthread_join(m_ProcSrcThread, &pthreadStatus);
+#endif
 
 	//Wait for sink thread to finish.
 	while (m_SinkFrameQueue.size() > 0)
@@ -2119,7 +2144,7 @@ void YOLONeuralNet::PostProcessDetections(StructRAWFrameSinkObject *rawFrameSink
 	rawFrameSinkObject->m_RAWSrcObject->m_OverlayFinalMat.copyTo(rawFrameSinkObject->m_RAWSrcObject->m_DisplayImageMat(rawFrameSinkObject->m_RAWSrcObject->m_OverlayRect));
 
 
-	if (m_SaveOutput)
+	if (m_SaveOPType != EnumSaveOPType::SAVE_OUTPUT_TYPE_NONE)
 		ProcessSinkFrame(rawFrameSinkObject);
 
 	if (m_EnableDisplay) {
@@ -2152,12 +2177,8 @@ float YOLONeuralNet::PropagateLayerInputsForward(StructYOLODeepNNLayer *inLayer,
 	int n = 0;
 	int size = 0;
 	int index = 0;
-	int mapIndex = 0;
-	int offset = 0;
 	int swapIdx = 0;
-	int inputSize = 0, arrayLen = 0;
-	float *inCpu = NULL; 
-	unsigned int outsize = 0;
+	int arrayLen = 0;
 	
 	float timeAccumulator = 0.0f;
 	//char debugFileName[256];
@@ -2173,7 +2194,7 @@ float YOLONeuralNet::PropagateLayerInputsForward(StructYOLODeepNNLayer *inLayer,
 
 			timeAccumulator += m_OCLManager->ConvertImageToColumnArray(netState->m_InputGpu, inLayer->m_C, inLayer->m_H,
 				inLayer->m_W, inLayer->m_Size, inLayer->m_Stride, inLayer->m_Pad, netState->m_Workspace);
-			
+
 			timeAccumulator += m_OCLManager->ComputeGEMM(false, false, m, n, k, 1.0f, inLayer->m_Weights_Gpu, 0, k,
 								netState->m_Workspace, 0, n, 1.0f, inLayer->m_OutputSwapGPUBuffers[netState->m_ConvSwapBufIdx], 0, n);
 
@@ -2192,6 +2213,7 @@ float YOLONeuralNet::PropagateLayerInputsForward(StructYOLODeepNNLayer *inLayer,
 			timeAccumulator += m_OCLManager->FlattenArray(netState->m_InputGpu, inLayer->m_H * inLayer->m_W,
 				inLayer->m_N * (inLayer->m_Coords + inLayer->m_Classes + 1), inLayer->m_Batch, 1, inLayer->m_Output_Gpu);
 
+
 			timeAccumulator += m_OCLManager->SoftMax(inLayer->m_Output_Gpu, inLayer->m_Classes, inLayer->m_Classes + 5,
 							inLayer->m_W * inLayer->m_H * inLayer->m_N * inLayer->m_Batch, 1, inLayer->m_Output_Gpu, 5);
 
@@ -2200,12 +2222,12 @@ float YOLONeuralNet::PropagateLayerInputsForward(StructYOLODeepNNLayer *inLayer,
 #else
 			m_OCLManager->ReadFloatArray(inLayer->m_PinnedOutput, inLayer->m_Output_Gpu, inLayer->m_Batch * inLayer->m_Outputs);
 #endif
-			
+
 			size = inLayer->m_Coords + inLayer->m_Classes + 1;
 
 			arrayLen = inLayer->m_H * inLayer->m_W * inLayer->m_N;
 			
-			#pragma omp parallel num_threads(inLayer->m_N)	
+			//#pragma omp parallel num_threads(inLayer->m_N)	
 			for (int i = 0; i < arrayLen; ++i) {
 
 				index = size * i;
@@ -2237,3 +2259,21 @@ float YOLONeuralNet::PropagateLayerInputsForward(StructYOLODeepNNLayer *inLayer,
 
 	return timeAccumulator;
 }
+
+
+//sprintf(debugFileName, "debug_im2ol_layer_%d.log", netState->m_LayerIndex);
+//PrintOCLBuffer(netState->m_Workspace, m_OCLManager, debugFileName, inLayer->m_Inputs);
+
+
+//sprintf(debugFileName, "debug_gemm_layer_%d.log", netState->m_LayerIndex);
+//PrintOCLBuffer(inLayer->m_OutputSwapGPUBuffers[netState->m_ConvSwapBufIdx], m_OCLManager, debugFileName, inLayer->m_Outputs);
+
+//sprintf(debugFileName, "debug_addbias_layer_%d.log", netState->m_LayerIndex);
+//PrintOCLBuffer(inLayer->m_OutputSwapGPUBuffers[netState->m_ConvSwapBufIdx], m_OCLManager, debugFileName, inLayer->m_Outputs);
+
+//sprintf(debugFileName, "debug_activate_layer_%d.log", netState->m_LayerIndex);
+//PrintOCLBuffer(inLayer->m_OutputSwapGPUBuffers[netState->m_ConvSwapBufIdx], m_OCLManager, debugFileName, inLayer->m_Outputs);
+
+
+//sprintf(debugFileName, "debug_activate_layer_%d.log", netState->m_LayerIndex);
+//PrintOCLBuffer(inLayer->m_OutputSwapGPUBuffers[netState->m_ConvSwapBufIdx], m_OCLManager, debugFileName, inLayer->m_Inputs);

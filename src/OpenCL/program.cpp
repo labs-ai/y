@@ -57,15 +57,11 @@ Program::Program(std::vector<std::string> &kernelFilePath, cl_context *context, 
     {
         std::cout<<"Kernel File Not Found in specified location!"<<std::endl;
     }
-    size_t   programSize = programBuffer.size();
-
 
 	char* source = NULL;
 	size_t src_size = 0;
-	cl_int err = CL_SUCCESS;
-	err = ReadSourceFromFile(kernelFilePath[0].c_str(), &source, &src_size);
+	ReadSourceFromFile(kernelFilePath[0].c_str(), &source, &src_size);
 
-    //_program = clCreateProgramWithSource((*_pContext), 1,(const char **)&programBuffer, &programSize, &_status);
 	_program = clCreateProgramWithSource((*_pContext), 1, (const char **)&source, &src_size, &_status);
     //DEBUG_CL(_status);
     checkErr(_status, __LINE__,"clCreateProgramWithSource");

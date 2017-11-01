@@ -164,7 +164,6 @@ set(SOURCES
   src/VideoProcessing/YoloOCLDNN.cpp
   src/OpenCL/buffer.cpp
   src/OpenCL/cl_wrapper.cpp
-  src/OpenCL/clutils.cpp
   src/OpenCL/helpers.cpp
   src/OpenCL/iv_common.cpp
   src/OpenCL/kernel_launcher.cpp
@@ -180,7 +179,6 @@ set(HEADERS  # such that they can be discovered by IDEs such as CLion and Visual
   src/Utilities/include/ConvertUTF.h
   src/OpenCL/include/cl_wrapper.hpp
   src/OpenCL/include/buffer.h
-  src/OpenCL/include/clutils.h
   src/OpenCL/include/helpers.h
   src/OpenCL/include/iv_common.h
   src/OpenCL/include/kernel_launcher.h

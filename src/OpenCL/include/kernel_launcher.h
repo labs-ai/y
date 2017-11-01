@@ -36,8 +36,7 @@ public:
             std::cout << "Error: argument index out of range" << std::endl;
             exit(-1);///!TODO: Custom exit code
         }
-        cl_int status = clSetKernelArg(*_pKernel, index, sizeof(x), &x);
-        DEBUG_CL(status);
+        clSetKernelArg(*_pKernel, index, sizeof(x), &x);
         _argListData[index] = true;
         return *this;
     }
@@ -63,11 +62,10 @@ public:
             std::cout << "Error: argument index out of range" << std::endl;
             exit(-1);///!TODO: Custom exit code
         }
-        cl_int status = clSetKernelArg(*_pKernel, index, sizeof(x), &x);
+        clSetKernelArg(*_pKernel, index, sizeof(x), &x);
         DEBUG_VALUE("Setting Kernel Argument: ", index);
         DEBUG_VALUE("Value/Address: ", x);
         DEBUG_VALUE("Size : ", sizeof(x));
-        DEBUG_CL(status);
         _argListData[index] = true;
         return this;
     }

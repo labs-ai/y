@@ -5,8 +5,12 @@
  * Enable CL_INFO_PRINT macro to see OpenCL Device and Kernel Info
  *
  */
+
+
+
 #include "iv_common.h"
-#include "CL/cl.h"
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
+#include <CL/cl.h>
 //#include "CL/cl.hpp"
 
 #include "program.h"
@@ -20,8 +24,8 @@
 class CLSetup
 {
 public:
-    void init(char* deviceName);
-    void getPlatformID();
+    bool init(const char *gpuDevType, char* deviceName);
+	bool getPlatformID(const char *gpuDevType);
     void getDeviceID(char* deviceName);
     void getContextnQueue();
     //Program* createProgram(std::string &kernelFilePath);
@@ -54,7 +58,7 @@ public:
     {
         return _numPlatforms;
     }
-    void getDeviceName()
+    /*void getDeviceName()
     {
         char*   infoName;
         size_t  infoCLSize;
@@ -63,7 +67,7 @@ public:
         clGetPlatformInfo(_platformID,CL_PLATFORM_NAME, sizeof(char) * infoCLSize, infoName, NULL );
         std::cout<<"CL_PLATFORM_NAME          : "<<infoName<<std::endl;
         free(infoName);
-    }
+    }*/
     int getNumberOfDevices()
     {
         return _numDevices;
@@ -110,7 +114,7 @@ public:
         return _preferredWorkGrpSize;
     }
 
-    void getSupportedExtensions()
+    /*void getSupportedExtensions()
     {
         size_t infoCLSize;
         char* infoExtensions;
@@ -119,7 +123,7 @@ public:
         clGetPlatformInfo(_platformID,CL_PLATFORM_EXTENSIONS, sizeof(char) * infoCLSize, infoExtensions, NULL );
         std::cout<<"CL_PLATFORM_EXTENSIONS          : "<<infoExtensions<<std::endl;
         free(infoExtensions);
-    }
+    }*/
 
     ~CLSetup()
     {

@@ -17,7 +17,7 @@ void OCLBuffer::read(void *hostMem, const size_t size, const size_t offset, cons
 {
 	//DWORD readVal = ::GetTickCount();
     cl_int status = 0;
-	cl_event execEvent = NULL;
+	//cl_event execEvent = NULL;
     //status = clEnqueueReadBuffer(*_pQueue, _memory, blocking, offset, size, hostMem, 0, NULL, NULL);
 	status = clEnqueueReadBuffer(*_pQueue, _memory, blocking, offset, size, hostMem, 0, NULL, NULL);// &execEvent);
 	if (status == CL_SUCCESS) {
